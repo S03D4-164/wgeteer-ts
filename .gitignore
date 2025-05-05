@@ -1,5 +1,6 @@
 .env
-.log
+*.log
 *.db
 node_modules
 package-lock.json
+data
