@@ -1,0 +1,50 @@
+{
+    "name": "node-xwhois",
+    "version": "2.0.10",
+    "description": "Advanced whois library with extended capabilities.",
+    "main": "./index.js",
+    "module": "./index.ts",
+    "exports": {
+      ".": {
+        "import": "./index.ts"
+      }
+    },
+    "author": "Alexander Russkiy <developer@xinit.ru>",
+    "license": "MIT",
+    "scripts": {
+        "test": "mocha test/index.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/kolonist/node-xwhois"
+    },
+    "bugs": {
+        "url": "https://github.com/kolonist/node-xwhois/issues"
+    },
+    "keywords": [
+        "whois",
+        "geoIP",
+        "geolocation",
+        "geo location",
+        "BGP",
+        "AS",
+        "Autonomous system",
+        "domain name",
+        "DNS",
+        "IPv4",
+        "IPv6"
+    ],
+    "dependencies": {
+        "@maxmind/geoip2-node": "latest",
+        "ip2location-nodejs": "latest",
+        "ip2proxy-nodejs": "latest",
+        "jszip": "latest",
+        "tar-stream": "latest",
+        "whois": "latest"
+    },
+    "devDependencies": {
+        "eslint": "latest",
+        "eslint-config-google": "latest",
+        "mocha": "latest"
+    }
+}

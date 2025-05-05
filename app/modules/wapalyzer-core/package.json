@@ -1,0 +1,38 @@
+{
+  "name": "wapalyzer-core",
+  "description": "Identify technologies on websites",
+  "keywords": [
+    "wappalyzer",
+    "wappalyzer-core",
+    "analyze",
+    "identify",
+    "detect",
+    "detector",
+    "technology",
+    "cms",
+    "framework",
+    "library",
+    "software",
+    "wapalyzer"
+  ],
+  "homepage": "https://www.wappalyzer.com/",
+  "version": "6.11.0",
+  "author": "Wappalyzer",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tylerpuig/wapalyzer-core"
+  },
+  "funding": [
+    {
+      "url": "https://github.com/sponsors/aliasio"
+    }
+  ],
+  "main": "./index.js",
+  "module": "./index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    }
+  }
+}
