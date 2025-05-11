@@ -33,7 +33,9 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
 
       let bgp: any[] | undefined;
       try {
-        bgp = await whois.bgpInfo(ip, 10000);
+        if(net.isIPv4(ip)){
+          bgp = await whois.bgpInfo(ip, 10000);
+        }
       } catch (err) {
         logger.error(err);
       }
