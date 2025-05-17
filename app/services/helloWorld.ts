@@ -1,4 +1,4 @@
-import logger from '../modules/logger';
+import logger from '../utils/logger';
 import { Agenda } from 'agenda';
 
 export default async (agenda: Agenda) => {

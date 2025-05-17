@@ -1,5 +1,5 @@
-import logger from '../modules/logger';
-import * as wgeteer from '../modules/wgeteer';
+import logger from '../utils/logger';
+import * as wgeteer from '../utils/wgeteer';
 import { Agenda } from 'agenda';
 
 export default async (agenda: Agenda) => {

@@ -1,5 +1,5 @@
-import logger from '../modules/logger';
-import * as vt from '../modules/vt';
+import logger from '../utils/logger';
+import * as vt from '../utils/vt';
 import { Agenda } from 'agenda';
 
 export default async (agenda: Agenda) => {

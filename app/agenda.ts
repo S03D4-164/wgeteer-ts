@@ -1,13 +1,13 @@
 import mongoose from 'mongoose';
-import logger from './modules/logger';
+import logger from './utils/logger';
 import Agenda from 'agenda';
-import helloWorld from './tasks/helloWorld';
-import wgeteer from './tasks/wgeteer';
-import psChrome from './tasks/psChrome';
-import killChrome from './tasks/killChrome';
-import vtPayload from './tasks/vtPayload';
-import gsblookup from './tasks/gsblookup';
-import gsblookupUrl from './tasks/gsblookupUrl';
+import helloWorld from './services/helloWorld';
+import wgeteer from './services/wgeteer';
+import psChrome from './services/psChrome';
+import killChrome from './services/killChrome';
+import vtPayload from './services/vtPayload';
+import gsblookup from './services/gsblookup';
+import gsblookupUrl from './services/gsblookupUrl';
 
 const mongoConnectionString = 'mongodb://127.0.0.1:27017/wgeteer';
 

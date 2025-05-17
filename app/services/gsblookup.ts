@@ -1,5 +1,5 @@
-import logger from '../modules/logger';
-import * as gsblookup from '../modules/gsblookup';
+import logger from '../utils/logger';
+import * as gsblookup from '../utils/gsblookup';
 import { Agenda, JobAttributesData } from 'agenda';
 
 export default async (agenda: Agenda) => {
