@@ -3,6 +3,7 @@ import logger from './utils/logger';
 import Agenda from 'agenda';
 import helloWorld from './services/helloWorld';
 import wgeteer from './services/wgeteer';
+import playwget from './services/playwget';
 import psChrome from './services/psChrome';
 import killChrome from './services/killChrome';
 import vtPayload from './services/vtPayload';
@@ -42,6 +43,7 @@ const agenda = new Agenda({
 agenda.on('ready', async function () {
   await helloWorld(agenda);
   await wgeteer(agenda);
+  await playwget(agenda);
   await psChrome(agenda);
   await killChrome(agenda);
   await vtPayload(agenda);

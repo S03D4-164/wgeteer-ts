@@ -15,12 +15,16 @@ import { saveFullscreenshot } from './screenshot';
 
 import { Browser, CDPSession, Page, Target } from 'puppeteer';
 import mongoose from 'mongoose';
-import { connect } from "puppeteer-real-browser";
+import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';
 //import crypto from 'crypto';
 
-async function pptrEventSet(client: CDPSession, browser: Browser, page: Page): Promise<void> {
+async function pptrEventSet(
+  client: CDPSession,
+  browser: Browser,
+  page: Page,
+): Promise<void> {
   /*
   client.on("Network.requestWillBeSent", async ({ requestId, request }) => {
     logger.debug("[requestWillBeSent]", requestId);
@@ -227,7 +231,9 @@ async function wget(pageId: string): Promise<string | undefined> {
   ];
 
   if (webpage.option?.proxy) {
-    if (webpage.option.proxy.match(/^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}:\d{1,5}$/)) {
+    if (
+      webpage.option.proxy.match(/^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}:\d{1,5}$/)
+    ) {
       chromiumArgs.push(`--proxy-server=${webpage.option.proxy}`);
     }
   }
@@ -236,7 +242,11 @@ async function wget(pageId: string): Promise<string | undefined> {
   const executablePath = '/usr/bin/google-chrome-stable';
   const product = 'chrome';
 
-  async function genPage(): Promise<{ page: Page; browser: Browser; setTarget: any }> {
+  async function genPage(): Promise<{
+    page: Page;
+    browser: Browser;
+    setTarget: any;
+  }> {
     try {
       if (webpage.option?.pptr === 'firefox') {
         console.log(executablePath);
@@ -249,12 +259,13 @@ async function wget(pageId: string): Promise<string | undefined> {
         return { page: page as Page, browser, setTarget };
       } else if (webpage.option?.pptr === 'real') {
         process.env.CHROME_PATH = executablePath;
-        const { page: connectedPage, browser: connectedBrowser } = await connect({
-          headless: false,
-          args: chromiumArgs,
-          //tf: true,
-          turnstile: true,
-        });
+        const { page: connectedPage, browser: connectedBrowser } =
+          await connect({
+            headless: false,
+            args: chromiumArgs,
+            //tf: true,
+            turnstile: true,
+          });
         const page = connectedPage as any;
         const browser = connectedBrowser as any;
         await page.setViewport({
@@ -263,7 +274,10 @@ async function wget(pageId: string): Promise<string | undefined> {
         });
         return { page, browser, setTarget };
       } else if (webpage.option?.pptr === 'antibot') {
-        const antibrowser = await antibotbrowser.startbrowser(9515, webpage.input);
+        const antibrowser = await antibotbrowser.startbrowser(
+          9515,
+          webpage.input,
+        );
         console.log(antibrowser);
         const opt = {
           browserWSEndpoint: antibrowser.websocket,
@@ -313,7 +327,9 @@ async function wget(pageId: string): Promise<string | undefined> {
     ({ page, browser, setTarget } = await genPage());
     const browserVersion = await browser.version();
     const browserProc = browser.process();
-    logger.debug(`${browserVersion}, ${browserProc?.pid}, ${page}, ${setTarget}`);
+    logger.debug(
+      `${browserVersion}, ${browserProc?.pid}, ${page}, ${setTarget}`,
+    );
   } catch (error: any) {
     logger.error(error);
     webpage.error = error.message;
@@ -359,12 +375,17 @@ async function wget(pageId: string): Promise<string | undefined> {
       });
     }
 
-    client.on('Network.requestIntercepted', async ({ interceptionId, request, responseStatusCode }) => {
-      //console.log(`[Intercepted] ${requestId}, ${responseStatusCode}, ${isDownload}, ${request.url}`);
-      try {
-        if (client) {
-          let response = await client.send('Network.getResponseBodyForInterception', { interceptionId });
-        /*
+    client.on(
+      'Network.requestIntercepted',
+      async ({ interceptionId, request, responseStatusCode }) => {
+        //console.log(`[Intercepted] ${requestId}, ${responseStatusCode}, ${isDownload}, ${request.url}`);
+        try {
+          if (client) {
+            let response = await client.send(
+              'Network.getResponseBodyForInterception',
+              { interceptionId },
+            );
+            /*
         console.log(
           "[Intercepted]",
           //requestId,
@@ -372,31 +393,41 @@ async function wget(pageId: string): Promise<string | undefined> {
           response.base64Encoded,
         );
         */
-        let newBody = (response as { body: string; base64Encoded: boolean }).base64Encoded
-          ? Buffer.from((response as { body: string; base64Encoded: boolean }).body, 'base64')
-          : (response as { body: string; base64Encoded: boolean }).body;
-        let cache = {
-          url: request.url,
-          body: newBody,
-          interceptionId: interceptionId,
-        };
-          responseCache.push(cache);
+            let newBody = (response as { body: string; base64Encoded: boolean })
+              .base64Encoded
+              ? Buffer.from(
+                  (response as { body: string; base64Encoded: boolean }).body,
+                  'base64',
+                )
+              : (response as { body: string; base64Encoded: boolean }).body;
+            let cache = {
+              url: request.url,
+              body: newBody,
+              interceptionId: interceptionId,
+            };
+            responseCache.push(cache);
+          }
+          responseCache.push({});
+        } catch (err: any) {
+          if (err.message) {
+            logger.debug(
+              `[Intercepted] ${err.message} ${responseStatusCode} ${request.url}`,
+            );
+          }
+          //console.log("[Intercepted] error", err);
         }
-        responseCache.push({});
-      } catch (err: any) {
-        if (err.message) {
-          logger.debug(`[Intercepted] ${err.message} ${responseStatusCode} ${request.url}`);
-        }
-        //console.log("[Intercepted] error", err);
-      }
 
-      try {
-        if(client)await client.send('Network.continueInterceptedRequest', { interceptionId });
-        //console.log(`Continuing interception ${interceptionId}`)
-      } catch (err: any) {
-        logger.debug(err);
-      }
-    });
+        try {
+          if (client)
+            await client.send('Network.continueInterceptedRequest', {
+              interceptionId,
+            });
+          //console.log(`Continuing interception ${interceptionId}`)
+        } catch (err: any) {
+          logger.debug(err);
+        }
+      },
+    );
   } catch (err: any) {
     logger.error('[client]', err);
     webpage.error = err.message;
@@ -484,7 +515,7 @@ async function wget(pageId: string): Promise<string | undefined> {
           x: rect.left,
           y: rect.top,
           zoom: zoom,
-        };        
+        };
       }, selector);
       //console.log(info);
       const center_height = info.height / 2;
@@ -501,9 +532,10 @@ async function wget(pageId: string): Promise<string | undefined> {
       //await page.mouse.move(click_x, click_y, { steps: 1 });
       await page.mouse.click(click_x, click_y);
 
-      await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
-     }
-   
+      await new Promise((done) =>
+        setTimeout(done, webpage.option.delay * 1000),
+      );
+    }
   } catch (err: any) {
     //logger.info(err);
     console.log(err);
@@ -511,7 +543,9 @@ async function wget(pageId: string): Promise<string | undefined> {
     //await page._client.send("Page.stopLoading");
   }
 
-  logger.debug(`goto completed. ${requestArray.length}, ${responseArray.length}`);
+  logger.debug(
+    `goto completed. ${requestArray.length}, ${responseArray.length}`,
+  );
 
   try {
     webpage.url = page.url();
@@ -554,7 +588,9 @@ async function wget(pageId: string): Promise<string | undefined> {
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
   }
 
-  logger.debug(`[finished] ${requestArray.length}, ${responseArray.length}, ${webpage.url}`);
+  logger.debug(
+    `[finished] ${requestArray.length}, ${responseArray.length}, ${webpage.url}`,
+  );
   await webpage.save();
   /*
   await new Promise((done) =>
@@ -579,13 +615,13 @@ async function wget(pageId: string): Promise<string | undefined> {
     console.log('[Response]', err);
     logger.error(err);
   }
-  if(responses.length == 0) {
+  if (responses.length == 0) {
     for (let res of responseArray) {
-      try{
-      const newRes = new ResponseModel(res);
-      await newRes.save();
-      responses.push(newRes);
-      }catch(err){
+      try {
+        const newRes = new ResponseModel(res);
+        await newRes.save();
+        responses.push(newRes);
+      } catch (err) {
         console.log('[Response]', err);
         logger.error(err);
       }
@@ -666,6 +702,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       }
     }
     //console.log(cookies, headers);
+    /*
     const wapalyzed = await wapalyze(
       webpage.url,
       headers,
@@ -680,6 +717,7 @@ async function wget(pageId: string): Promise<string | undefined> {
     if (wapps) {
       webpage.wappalyzer = wapps;
     }
+    */
     await webpage.save();
 
     //ss = null;
