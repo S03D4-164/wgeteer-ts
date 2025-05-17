@@ -1,13 +1,21 @@
-//import { Wappalyzer as WappalyzerCore } from 'wapalyzer-core';
-import { Wappalyzer as WappalyzerCore } from "./wapalyzer-core";
+import { Wappalyzer as WappalyzerCore } from 'wapalyzer-core';
+//import { Wappalyzer as WappalyzerCore } from "./wapalyzer-core";
 import * as path from 'node:path';
 import * as fs from 'fs';
 
-const wapalyze = async (url: string, headers: any, html: string, cookies: any) => {
+const wapalyze = async (
+  url: string,
+  headers: any,
+  html: string,
+  cookies: any,
+) => {
   let result: any;
   try {
     const categories = JSON.parse(
-      fs.readFileSync(path.resolve(__dirname, `./webappanalyzer/src/categories.json`), 'utf-8'),
+      fs.readFileSync(
+        path.resolve(__dirname, `./webappanalyzer/src/categories.json`),
+        'utf-8',
+      ),
     );
 
     let technologies: any = {};
@@ -17,7 +25,10 @@ const wapalyze = async (url: string, headers: any, html: string, cookies: any) =
         ...technologies,
         ...JSON.parse(
           fs.readFileSync(
-            path.resolve(__dirname, `./webappanalyzer/src/technologies/${character}.json`),
+            path.resolve(
+              __dirname,
+              `./webappanalyzer/src/technologies/${character}.json`,
+            ),
             'utf-8',
           ),
         ),

@@ -1,6 +1,6 @@
 import ResponseModel from '../models/response';
-import * as whois from './node-xwhois';
-import { IP2Location } from './ip2location-nodejs';
+import * as whois from 'node-xwhois';
+import { IP2Location } from 'ip2location-nodejs';
 import logger from './logger';
 import net from 'net';
 import { promises as dns } from 'dns';
@@ -33,7 +33,7 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
 
       let bgp: any[] | undefined;
       try {
-        if(net.isIPv4(ip)){
+        if (net.isIPv4(ip)) {
           bgp = await whois.bgpInfo(ip, 10000);
         }
       } catch (err) {
@@ -105,7 +105,9 @@ const setResponseIp = async (responses: any[]): Promise<void> => {
   }
 };
 
-export const getHostInfo = async (host: string): Promise<HostInfo | undefined> => {
+export const getHostInfo = async (
+  host: string,
+): Promise<HostInfo | undefined> => {
   const hostinfo = await getIpinfo(host);
   return hostinfo;
 };
