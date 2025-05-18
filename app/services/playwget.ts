@@ -1,6 +1,6 @@
 import logger from '../utils/logger';
 import playwget from '../utils/playwget';
-import harparse from '../utils/harparse';
+import harparse from '../utils/playwgetSave';
 
 import { Agenda } from 'agenda';
 

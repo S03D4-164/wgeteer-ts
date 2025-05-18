@@ -9,6 +9,7 @@ export interface IWebpage extends Document {
   title?: string;
   error?: string;
   thumbnail?: string;
+  thumbnails?: [string];
   content?: string;
   createdAt?: Date;
   status?: number;
@@ -33,6 +34,7 @@ export interface IWebpage extends Document {
   requests?: mongoose.Types.ObjectId[];
   responses?: mongoose.Types.ObjectId[];
   screenshot?: mongoose.Types.ObjectId;
+  screenshots?: mongoose.Types.ObjectId[];
 }
 
 const webpageSchema: Schema<IWebpage> = new Schema(
@@ -58,6 +60,11 @@ const webpageSchema: Schema<IWebpage> = new Schema(
     thumbnail: {
       type: String,
     },
+    thumbnails: [
+      {
+        type: String,
+      },
+    ],
     content: {
       type: String,
     },
@@ -95,6 +102,7 @@ const webpageSchema: Schema<IWebpage> = new Schema(
     requests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Request' }],
     responses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Response' }],
     screenshot: { type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' },
+    screenshots: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' }],
   },
   { timestamps: false },
 );
@@ -105,6 +113,9 @@ webpageSchema.index({ input: 1, createdAt: -1 });
 
 webpageSchema.plugin(mongoosePaginate);
 
-const WebpageModel: Model<IWebpage> = mongoose.model<IWebpage, mongoose.PaginateModel<IWebpage>>('Webpage', webpageSchema);
+const WebpageModel: Model<IWebpage> = mongoose.model<
+  IWebpage,
+  mongoose.PaginateModel<IWebpage>
+>('Webpage', webpageSchema);
 
 export default WebpageModel;

@@ -9,6 +9,7 @@ import logger from './logger';
 import findProc from 'find-process';
 import crypto from 'crypto';
 import ScreenshotModel from '../models/screenshot';
+import savePayload from './playwgetSave';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -43,8 +44,13 @@ async function pptrEventSet(
   page.on('domcontentloaded', () => {
     console.log('DOM content loaded');
   });
-  page.on('download', (data) => {
-    console.log('Download started:', data);
+  page.on('download', async (data) => {
+    console.log('Download started:', data.url());
+    const read = await data.createReadStream();
+    read.on('data', (chunk) => {
+      console.log(`Received ${chunk.length} bytes of data.`);
+    });
+    //await savePayload(read);
   });
   // Log all uncaught errors to the terminal
   page.on('pageerror', (exception) => {
@@ -180,6 +186,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
   if (exHeaders) {
     await page.setExtraHTTPHeaders(exHeaders);
   }
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   try {
     await page.goto(webpage.input, {
@@ -193,6 +200,9 @@ async function playwget(pageId: string): Promise<string | undefined> {
     webpage.error = err.message;
   }
   logger.debug(`goto completed.`);
+
+  if (webpage.option.click) {
+  }
 
   try {
     webpage.url = page.url();

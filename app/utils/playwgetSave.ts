@@ -1,0 +1,315 @@
+import crypto from 'crypto';
+import logger from './logger';
+import PayloadModel from '../models/payload';
+import RequestModel from '../models/request';
+import ResponseModel from '../models/response';
+import WebpageModel from '../models/webpage';
+import HarfileModel from '../models/harfile';
+import { IRequest } from '../models/request';
+import mongoose from 'mongoose';
+import * as fs from 'fs';
+import archiver, { ArchiverOptions } from 'archiver';
+archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
+
+async function savePayload(
+  responseBuffer: Buffer,
+): Promise<string | undefined> {
+  try {
+    const md5Hash = crypto
+      .createHash('md5')
+      .update(responseBuffer)
+      .digest('hex');
+    const payload = await PayloadModel.findOneAndUpdate(
+      { md5: md5Hash },
+      { payload: responseBuffer },
+      { new: true, upsert: true },
+    ).exec();
+    if (payload && typeof payload === 'object' && '_id' in payload) {
+      return (payload as { _id: mongoose.Types.ObjectId })._id.toString();
+    }
+    return undefined;
+  } catch (err: any) {
+    logger.error(err);
+    console.log(err);
+    return undefined;
+  }
+}
+
+async function saveResponse(
+  response: any,
+  request: any,
+  pageId: mongoose.Types.ObjectId,
+): Promise<any> {
+  let responseBuffer: Buffer | undefined;
+  let text: string | undefined;
+  let payloadId: string | undefined;
+  const responseStatus: number = response.status;
+
+  if (responseBuffer) {
+    payloadId = await savePayload(responseBuffer);
+  }
+
+  try {
+    if (!text && responseStatus >= 200) {
+      text = response.content.text;
+    }
+  } catch (err: any) {
+    logger.error('[Response] failed on save text', err);
+  }
+
+  let securityDetails: any = {};
+  try {
+    const secDetails = response.securityDetails;
+    if (secDetails) {
+      securityDetails = {
+        issuer: secDetails.issuer,
+        protocol: secDetails.protocol,
+        subjectName: secDetails.subjectName,
+        validFrom: secDetails.validFrom,
+        validTo: secDetails.validTo,
+      };
+    }
+  } catch (error: any) {
+    logger.debug(error);
+  }
+
+  //try {
+  const url: string = request.url;
+  let urlHash: any;
+  if (url) {
+    urlHash = crypto.createHash('md5').update(url).digest('hex');
+  }
+  const headers: any = response.headers;
+
+  const newResponse = {
+    webpage: pageId,
+    url,
+    urlHash: urlHash,
+    status: response.status,
+    statusText: response.statusText,
+    //ok: response.ok,
+    //remoteAddress: response.remoteAddress,
+    headers,
+    securityDetails,
+    //payload: payloadId,
+    text,
+    //interceptionId,
+  };
+
+  if (text) {
+    const sizelimit: number = 16000000;
+    const resLength: number = JSON.stringify(response).length;
+    if (resLength > sizelimit) {
+      newResponse.text = undefined;
+    }
+  }
+  return newResponse;
+  /*
+  } catch (error: any) {
+    logger.error(error);
+    return undefined;
+  }
+    */
+}
+
+async function saveRequest(
+  request: any,
+  pageId: mongoose.Types.ObjectId,
+): Promise<IRequest | undefined> {
+  let redirectChain: string[] = [];
+
+  const headers: any = request.headers;
+
+  try {
+    const newRequest: any = {
+      webpage: pageId,
+      url: request.url,
+      method: request.method,
+      resourceType: request.resourceType,
+      isNavigationRequest: request.isNavigationRequest,
+      postData: request.postData,
+      headers,
+      failure: request.failure,
+      redirectChain,
+    };
+    return newRequest;
+  } catch (err: any) {
+    logger.error(err);
+    return undefined;
+  }
+}
+
+async function saveHarfile(harfile: any, pageId: any): Promise<void> {
+  const archive = archiver.create('zip-encrypted', {
+    zlib: { level: 8 },
+    encryptionMethod: 'aes256',
+    password: pageId,
+  } as unknown as ArchiverOptions);
+
+  archive.on('error', (err: Error) => {
+    console.log(err);
+  });
+
+  const buf = fs.readFileSync(harfile);
+  archive.append(buf, { name: `${pageId}.har` });
+  const archived = await archive.finalize();
+  const newHarfile = new HarfileModel({
+    webpage: pageId,
+    har: buf,
+  });
+  await newHarfile.save();
+}
+
+async function harparse(pageId: string): Promise<void> {
+  const dataDir = `/tmp/${pageId}`;
+  const recordHar = `${dataDir}/pw.har`;
+  console.log(recordHar);
+  let requestArray: any[] = [];
+  let responseArray: any[] = [];
+  let webpage = await WebpageModel.findById(pageId).exec();
+  let har;
+  try {
+    har = JSON.parse(fs.readFileSync(recordHar, 'utf-8'));
+    const entries = har.log.entries;
+    let i = 0;
+    for (const entry of entries) {
+      let request = await saveRequest(
+        entry.request,
+        webpage?._id as mongoose.Types.ObjectId,
+      );
+      if (request) {
+        request.interceptionId = String(i);
+        //console.log(request);
+        requestArray.push(request);
+      }
+      let response = await saveResponse(
+        entry.response,
+        entry.request,
+        webpage?._id as mongoose.Types.ObjectId,
+      );
+      if (response) {
+        response.interceptionId = String(i);
+        response.remoteAddress = {
+          ip: entry.serverIPAddress,
+          port: entry._serverPort,
+        };
+        //console.log(response);
+        responseArray.push(response);
+      }
+      i++;
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  let requests: any[] = [];
+  try {
+    requests = await RequestModel.insertMany(requestArray, { ordered: false });
+  } catch (err: any) {
+    console.log('[Request]', err);
+    logger.error(err);
+  }
+
+  let responses: any[] = [];
+  try {
+    responses = await ResponseModel.insertMany(responseArray, {
+      ordered: false,
+      //rawResult: true,
+    });
+  } catch (err: any) {
+    console.log('[Response]', err);
+    logger.error(err);
+  }
+  if (responses.length == 0) {
+    for (let res of responseArray) {
+      try {
+        const newRes = new ResponseModel(res);
+        await newRes.save();
+        responses.push(newRes);
+      } catch (err) {
+        console.log('[Response]', err);
+        logger.error(err);
+      }
+    }
+  }
+
+  if (webpage) {
+    let finalResponse: any;
+    try {
+      if (requests && responses) {
+        for (const res of responses) {
+          for (const req of requests) {
+            //console.log(req.interceptionId, res.interceptionId);
+            if (res.interceptionId === req.interceptionId) {
+              res.request = req;
+              req.response = res;
+              break;
+            }
+          }
+        }
+      }
+      if (requests) {
+        await RequestModel.bulkSave(requests, { ordered: false });
+        webpage.requests = requests;
+      }
+      if (responses) {
+        await ResponseModel.bulkSave(responses, { ordered: false });
+        webpage.responses = responses;
+
+        if (webpage.url) {
+          for (const res of responses) {
+            if (res.url && res.url === webpage.url) {
+              finalResponse = res;
+              break;
+            }
+          }
+        }
+
+        if (!finalResponse) {
+          if (responses.length === 1) {
+            finalResponse = responses[0];
+            webpage.url = finalResponse.url;
+          }
+        }
+      }
+      if (finalResponse) {
+        if (webpage.error && finalResponse.status) {
+          webpage.error = undefined;
+        }
+        webpage.status = finalResponse.status;
+        webpage.headers = finalResponse.headers;
+        webpage.remoteAddress = finalResponse.remoteAddress;
+        webpage.securityDetails = finalResponse.securityDetails;
+        /*
+      if (webpage.remoteAddress?.ip) {
+        console.log(webpage.remoteAddress);
+        let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
+        if (hostinfo) {
+          if (hostinfo.reverse) {
+            webpage.remoteAddress.reverse = hostinfo.reverse;
+          }
+          if (hostinfo.bgp) {
+            webpage.remoteAddress.bgp = hostinfo.bgp;
+          }
+          if (hostinfo.geoip) {
+            webpage.remoteAddress.geoip = hostinfo.geoip;
+          }
+          if (hostinfo.ip) {
+            webpage.remoteAddress.ip = hostinfo.ip;
+          }
+        }
+      }
+        */
+      }
+      await webpage?.save();
+    } catch (err) {
+      console.log(err);
+    }
+  }
+  if (recordHar && webpage) {
+    saveHarfile(recordHar, webpage._id);
+  }
+
+  return;
+}
+
+export default harparse;
