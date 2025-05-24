@@ -143,23 +143,48 @@ async function saveRequest(
   }
 }
 
+async function createZip(
+  data: Buffer,
+  filename: string,
+  password: string,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const archive = archiver.create('zip-encrypted', {
+      zlib: { level: 5 },
+      encryptionMethod: 'zip20',
+      password,
+    } as unknown as ArchiverOptions);
+    const buffers: Buffer[] = [];
+
+    archive.on('data', (buffer: Buffer) => buffers.push(buffer));
+    archive.on('end', () => resolve(Buffer.concat(buffers)));
+    archive.on('error', (err: Error) => reject(err));
+
+    archive.append(data, { name: filename });
+    archive.finalize();
+  });
+}
+
 async function saveHarfile(harfile: any, pageId: any): Promise<void> {
+  const buf = fs.readFileSync(harfile);
+  logger.debug(buf.length);
+  const zipedHar = await createZip(buf, `${pageId}.har`, 'infected');
+  console.log(zipedHar.length);
+  /*
   const archive = archiver.create('zip-encrypted', {
     zlib: { level: 8 },
     encryptionMethod: 'aes256',
-    password: pageId,
+    password: 'infected',
   } as unknown as ArchiverOptions);
-
   archive.on('error', (err: Error) => {
     console.log(err);
   });
-
-  const buf = fs.readFileSync(harfile);
   archive.append(buf, { name: `${pageId}.har` });
   const archived = await archive.finalize();
+  */
   const newHarfile = new HarfileModel({
     webpage: pageId,
-    har: buf,
+    har: zipedHar,
   });
   await newHarfile.save();
 }

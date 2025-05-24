@@ -250,6 +250,7 @@ async function playwget(
   await page.close();
 
   browserContext.clearPermissions();
+  await browserContext.clearCookies();
   //browserContext.removeAllListeners();
   const browser = browserContext.browser();
   await browserContext.close();

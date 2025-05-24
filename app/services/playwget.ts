@@ -17,8 +17,7 @@ export default async (agenda: Agenda) => {
     }
     await playwget(data.pageId);
     await harparse(data.pageId);
-
-    //agenda.now('analyzePage', { pageId: data.pageId });
+    agenda.now('analyzePage', { pageId: data.pageId });
     done();
   });
 };
