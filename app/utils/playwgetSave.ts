@@ -8,6 +8,7 @@ import HarfileModel from '../models/harfile';
 import { IRequest } from '../models/request';
 import mongoose from 'mongoose';
 import * as fs from 'fs';
+import { getHostInfo } from './ipInfo';
 import archiver, { ArchiverOptions } from 'archiver';
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
@@ -163,7 +164,7 @@ async function saveHarfile(harfile: any, pageId: any): Promise<void> {
 async function harparse(pageId: string): Promise<void> {
   const dataDir = `/tmp/${pageId}`;
   const recordHar = `${dataDir}/pw.har`;
-  console.log(recordHar);
+  logger.info(`${recordHar}`);
   let requestArray: any[] = [];
   let responseArray: any[] = [];
   let webpage = await WebpageModel.findById(pageId).exec();
@@ -204,9 +205,9 @@ async function harparse(pageId: string): Promise<void> {
   let requests: any[] = [];
   try {
     requests = await RequestModel.insertMany(requestArray, { ordered: false });
+    logger.debug(`[Request]: ${requests.length}`);
   } catch (err: any) {
-    console.log('[Request]', err);
-    logger.error(err);
+    logger.error(`[Request] ${err}`);
   }
 
   let responses: any[] = [];
@@ -215,9 +216,9 @@ async function harparse(pageId: string): Promise<void> {
       ordered: false,
       //rawResult: true,
     });
+    logger.debug(`[Response]: ${responses.length}`);
   } catch (err: any) {
-    console.log('[Response]', err);
-    logger.error(err);
+    logger.error(`[Response] ${err}`);
   }
   if (responses.length == 0) {
     for (let res of responseArray) {
@@ -227,7 +228,7 @@ async function harparse(pageId: string): Promise<void> {
         responses.push(newRes);
       } catch (err) {
         console.log('[Response]', err);
-        logger.error(err);
+        logger.error(`[Response] ${err}`);
       }
     }
   }
@@ -238,8 +239,8 @@ async function harparse(pageId: string): Promise<void> {
       if (requests && responses) {
         for (const res of responses) {
           for (const req of requests) {
-            //console.log(req.interceptionId, res.interceptionId);
             if (res.interceptionId === req.interceptionId) {
+              logger.debug(`${req.interceptionId}, ${res.interceptionId}`);
               res.request = req;
               req.response = res;
               break;
@@ -279,27 +280,29 @@ async function harparse(pageId: string): Promise<void> {
         webpage.headers = finalResponse.headers;
         webpage.remoteAddress = finalResponse.remoteAddress;
         webpage.securityDetails = finalResponse.securityDetails;
-        /*
-      if (webpage.remoteAddress?.ip) {
-        console.log(webpage.remoteAddress);
-        let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
-        if (hostinfo) {
-          if (hostinfo.reverse) {
-            webpage.remoteAddress.reverse = hostinfo.reverse;
-          }
-          if (hostinfo.bgp) {
-            webpage.remoteAddress.bgp = hostinfo.bgp;
-          }
-          if (hostinfo.geoip) {
-            webpage.remoteAddress.geoip = hostinfo.geoip;
-          }
-          if (hostinfo.ip) {
-            webpage.remoteAddress.ip = hostinfo.ip;
+
+        if (webpage.remoteAddress?.ip) {
+          logger.info(webpage.remoteAddress);
+          let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
+          if (hostinfo) {
+            if (hostinfo.reverse) {
+              webpage.remoteAddress.reverse = hostinfo.reverse;
+            }
+            if (hostinfo.bgp) {
+              hostinfo.bgp.forEach((item: any) =>
+                webpage.remoteAddress?.bgp.push(item),
+              );
+            }
+            if (hostinfo.geoip) {
+              webpage.remoteAddress?.geoip.push(hostinfo.geoip);
+            }
+            if (hostinfo.ip) {
+              webpage.remoteAddress.ip = hostinfo.ip;
+            }
           }
         }
       }
-        */
-      }
+      logger.debug(webpage.remoteAddress);
       await webpage?.save();
     } catch (err) {
       console.log(err);

@@ -1,43 +1,22 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
+import { mongoosastic } from 'mongoosastic-ts';
+import {
+  MongoosasticDocument,
+  MongoosasticModel,
+  MongoosasticPluginOpts,
+} from 'mongoosastic-ts/dist/types';
 
-interface IResponse extends Document {
-  url?: string;
-  urlHash?: string;
-  status?: number;
-  statusText?: string;
-  ok?: boolean;
-  text?: string;
-  remoteAddress?: {
-    ip?: string;
-    port?: number;
-    reverse?: string[];
-    bgp?: any[];
-    geoip?: any[];
-  };
-  headers?: Record<string, any>;
-  securityDetails?: {
-    issuer?: string;
-    protocol?: string;
-    subjectName?: string;
-    validFrom?: number;
-    validTo?: number;
-  };
-  createdAt?: Date;
-  wappalyzer?: string[];
-  yara?: Record<string, any>;
-  interceptionId?: string;
-  webpage?: mongoose.Types.ObjectId;
-  request?: mongoose.Types.ObjectId;
-  payload?: mongoose.Types.ObjectId;
-}
-
-const responseSchema: Schema<IResponse> = new Schema(
+const responseSchema = new Schema(
   {
     url: {
       type: String,
-      //es_indexed: true,
+      es_indexed: true,
     },
     urlHash: {
       type: String,
@@ -53,7 +32,7 @@ const responseSchema: Schema<IResponse> = new Schema(
     },
     text: {
       type: String,
-      //es_indexed: true,
+      es_indexed: true,
     },
     remoteAddress: {
       ip: { type: String },
@@ -92,6 +71,11 @@ const responseSchema: Schema<IResponse> = new Schema(
   { timestamps: false },
 );
 
+type responseModelType = InferSchemaType<typeof responseSchema>;
+
+responseSchema.plugin(paginate);
+//responseSchema.plugin(mongoosastic);
+
 responseSchema.index({ createdAt: -1 });
 responseSchema.index({ urlHash: 1 });
 responseSchema.index({ payload: 1 });
@@ -99,8 +83,10 @@ responseSchema.index({ text: 'text' });
 responseSchema.index({ webpage: 1 });
 responseSchema.index({ 'remoteAddress.ip': 1 });
 
-responseSchema.plugin(mongoosePaginate);
-
-const ResponseModel: Model<IResponse> = mongoose.model<IResponse, mongoose.PaginateModel<IResponse>>('Response', responseSchema);
+const ResponseModel = model<
+  responseModelType,
+  PaginateModel<responseModelType, MongoosasticModel<responseModelType>>
+>('Response', responseSchema);
 
 export default ResponseModel;
+export { responseModelType };

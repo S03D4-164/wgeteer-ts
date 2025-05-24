@@ -1,6 +1,6 @@
 import ResponseModel from '../models/response';
 import * as whois from 'node-xwhois';
-import { IP2Location } from 'ip2location-nodejs';
+import { IP2Location } from './ip2location-nodejs';
 import logger from './logger';
 import net from 'net';
 import { promises as dns } from 'dns';
@@ -42,7 +42,7 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
 
       let geo: GeoIPInfo = {};
       try {
-        const ip2location = new IP2Location();
+        const ip2location: any = new IP2Location();
         ip2location.open('/tmp/IP2LOCATION-LITE-DB1.IPV6.BIN');
         const country = ip2location.getCountryShort(ip);
         const country_long = ip2location.getCountryLong(ip);
@@ -60,6 +60,7 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
         geoip: geo,
         ip: ip,
       };
+      logger.info(ipInfo);
       return ipInfo;
     }
   } catch (err) {

@@ -1,43 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-export interface IWebpage extends Document {
-  input: string;
-  option?: Record<string, any>;
-  url?: string;
-  title?: string;
-  error?: string;
-  thumbnail?: string;
-  thumbnails?: [string];
-  content?: string;
-  createdAt?: Date;
-  status?: number;
-  remoteAddress?: {
-    ip?: string;
-    port?: number;
-    reverse?: string[];
-    bgp?: any[];
-    whois?: string;
-    geoip?: any[];
-  };
-  headers?: Record<string, any>;
-  securityDetails?: {
-    issuer?: string;
-    protocol?: string;
-    subjectName?: string;
-    validFrom?: number;
-    validTo?: number;
-  };
-  wappalyzer?: string[];
-  yara?: Record<string, any>;
-  requests?: mongoose.Types.ObjectId[];
-  responses?: mongoose.Types.ObjectId[];
-  screenshot?: mongoose.Types.ObjectId;
-  screenshots?: mongoose.Types.ObjectId[];
-}
-
-const webpageSchema: Schema<IWebpage> = new Schema(
+const webpageSchema = new Schema(
   {
     input: {
       type: String,
@@ -60,11 +29,6 @@ const webpageSchema: Schema<IWebpage> = new Schema(
     thumbnail: {
       type: String,
     },
-    thumbnails: [
-      {
-        type: String,
-      },
-    ],
     content: {
       type: String,
     },
@@ -102,20 +66,21 @@ const webpageSchema: Schema<IWebpage> = new Schema(
     requests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Request' }],
     responses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Response' }],
     screenshot: { type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' },
-    screenshots: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' }],
   },
   { timestamps: false },
 );
+
+type webpageModelType = InferSchemaType<typeof webpageSchema>;
+
+webpageSchema.plugin(paginate);
 
 webpageSchema.index({ createdAt: -1 });
 webpageSchema.index({ content: 'text' });
 webpageSchema.index({ input: 1, createdAt: -1 });
 
-webpageSchema.plugin(mongoosePaginate);
-
-const WebpageModel: Model<IWebpage> = mongoose.model<
-  IWebpage,
-  mongoose.PaginateModel<IWebpage>
->('Webpage', webpageSchema);
-
+const WebpageModel = model<webpageModelType, PaginateModel<webpageModelType>>(
+  'Webpage',
+  webpageSchema,
+);
 export default WebpageModel;
+export { webpageModelType };

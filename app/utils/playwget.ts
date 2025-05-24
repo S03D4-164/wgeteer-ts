@@ -10,6 +10,7 @@ import findProc from 'find-process';
 import crypto from 'crypto';
 import ScreenshotModel from '../models/screenshot';
 import savePayload from './playwgetSave';
+import mongoose from 'mongoose';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -17,44 +18,44 @@ async function pptrEventSet(
 ): Promise<void> {
   const browser = browserContext.browser();
   if (browser) {
-    browser.on('disconnected', () => console.log('browser disconnected'));
+    browser.on('disconnected', () => logger.debug('browser disconnected'));
   }
-  browserContext.on('close', () => console.log('browserContext closed'));
+  browserContext.on('close', () => logger.debug('browserContext closed'));
 
   page.on('request', (request: any) => {
-    //console.log("Request:", request.url());
+    //logger.debug(`Request: ${request.url()}`);
   });
   page.on('requestfinished', async (request: any) => {
     const res = await request.response();
-    console.log('Finished:', res.url());
+    logger.debug(`Finished: ${res.url()}`);
   });
   page.on('requestfailed', (request: any) => {
-    console.log('Failed:', request.url() + ' ' + request.failure().errorText);
+    logger.debug(`Failed: ${request.failure().errorText} ${request.url()}`);
   });
   page.on('close', () => {
-    console.log('Page closed');
+    logger.debug('Page closed');
   });
   page.on('crash', () => {
     console.log('Page crashed');
   });
   page.on('dialog', (dialog) => dialog.dismiss());
   page.on('load', () => {
-    console.log('Page loaded');
+    logger.debug('Page loaded');
   });
   page.on('domcontentloaded', () => {
-    console.log('DOM content loaded');
+    logger.debug('DOM content loaded');
   });
   page.on('download', async (data) => {
     console.log('Download started:', data.url());
     const read = await data.createReadStream();
     read.on('data', (chunk) => {
-      console.log(`Received ${chunk.length} bytes of data.`);
+      logger.debug(`Received ${chunk.length} bytes of data.`);
     });
     //await savePayload(read);
   });
   // Log all uncaught errors to the terminal
   page.on('pageerror', (exception) => {
-    console.log(`Uncaught exception: "${exception}"`);
+    logger.error(`Uncaught exception: "${exception}"`);
   });
 }
 
@@ -113,7 +114,11 @@ async function saveFullscreenshot(buff: Buffer): Promise<string | undefined> {
   }
 }
 
-async function playwget(pageId: string): Promise<string | undefined> {
+//async function playwget(pageId: string): Promise<string | undefined> {
+async function playwget(
+  pageId: string | mongoose.Types.ObjectId | undefined,
+): Promise<string | undefined> {
+  logger.debug(`playwget start: ${pageId}`);
   let webpage: any;
   try {
     webpage = await WebpageModel.findById(pageId).exec();
@@ -121,6 +126,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     logger.error(e);
     return;
   }
+  logger.debug(`webpage: ${webpage._id}`);
 
   if (!webpage) {
     logger.error(`page ${pageId} not found`);
@@ -196,7 +202,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     });
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
   } catch (err: any) {
-    logger.info(err);
+    logger.error(err);
     webpage.error = err.message;
   }
   logger.debug(`goto completed.`);
