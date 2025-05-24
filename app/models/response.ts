@@ -5,12 +5,14 @@ import mongoose, {
   PaginateModel,
 } from 'mongoose';
 import paginate from 'mongoose-paginate-v2';
+/*
 import { mongoosastic } from 'mongoosastic-ts';
 import {
   MongoosasticDocument,
   MongoosasticModel,
   MongoosasticPluginOpts,
 } from 'mongoosastic-ts/dist/types';
+*/
 
 const responseSchema = new Schema(
   {
@@ -85,7 +87,7 @@ responseSchema.index({ 'remoteAddress.ip': 1 });
 
 const ResponseModel = model<
   responseModelType,
-  PaginateModel<responseModelType, MongoosasticModel<responseModelType>>
+  PaginateModel<responseModelType>
 >('Response', responseSchema);
 
 export default ResponseModel;

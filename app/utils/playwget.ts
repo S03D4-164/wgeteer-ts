@@ -64,24 +64,30 @@ async function genPage(webpage: any): Promise<{
   browserContext: BrowserContext;
 }> {
   const dataDir = `/tmp/${webpage._id}`;
-  const browserContext = await chromium.launchPersistentContext(dataDir, {
-    channel: 'chrome',
-    headless: true,
-    viewport: null,
-    recordHar: { path: `${dataDir}/pw.har` },
-    ignoreHTTPSErrors: true,
-    //args: chromiumArgs,
-    // do NOT add custom browser headers or userAgent
-  });
-  const permissions = ['storage-access'];
-  await browserContext.grantPermissions(permissions);
-  //browserContext.setDefaultTimeout(30000);
-  const page = await browserContext.newPage();
-  await pptrEventSet(browserContext, page);
-  return {
-    page: page as Page,
-    browserContext: browserContext as BrowserContext,
-  };
+  logger.debug(`${dataDir}`);
+  try {
+    const browserContext = await chromium.launchPersistentContext(dataDir, {
+      channel: 'chrome',
+      headless: false,
+      viewport: null,
+      recordHar: { path: `${dataDir}/pw.har` },
+      ignoreHTTPSErrors: true,
+      //args: chromiumArgs,
+      // do NOT add custom browser headers or userAgent
+    });
+    const permissions = ['storage-access'];
+    await browserContext.grantPermissions(permissions);
+    //browserContext.setDefaultTimeout(30000);
+    const page = await browserContext.newPage();
+    await pptrEventSet(browserContext, page);
+    return {
+      page: page as Page,
+      browserContext: browserContext as BrowserContext,
+    };
+  } catch (err) {
+    logger.error(err);
+  }
+  return { page: null as any, browserContext: null as any };
 }
 
 async function imgResize(buffer: Buffer): Promise<Buffer> {
@@ -180,6 +186,10 @@ async function playwget(
   logger.debug(webpage.option);
 
   const { page, browserContext } = await genPage(webpage);
+  if (!page || !browserContext) {
+    logger.error('Failed to create page or browser context');
+    return;
+  }
   //const browser = browserContext.browser();
   if (webpage.option?.userAgent && webpage.option.userAgent.length > 1) {
     //await page.setUserAgent(webpage.option.userAgent);

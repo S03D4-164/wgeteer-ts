@@ -128,11 +128,14 @@ async function saveRequest(
       method: request.method,
       resourceType: request.resourceType,
       isNavigationRequest: request.isNavigationRequest,
-      postData: request.postData,
+      //postData: request.postData,
       headers,
       failure: request.failure,
       redirectChain,
     };
+    if (request.postData) {
+      newRequest.postData = request.postData.text;
+    }
     return newRequest;
   } catch (err: any) {
     logger.error(err);
@@ -180,7 +183,7 @@ async function harparse(pageId: string): Promise<void> {
       );
       if (request) {
         request.interceptionId = String(i);
-        //console.log(request);
+        //logger.debug(request);
         requestArray.push(request);
       }
       let response = await saveResponse(
@@ -194,6 +197,7 @@ async function harparse(pageId: string): Promise<void> {
           ip: entry.serverIPAddress,
           port: entry._serverPort,
         };
+        response.securityDetails = entry._securityDetails;
         //console.log(response);
         responseArray.push(response);
       }
@@ -204,19 +208,21 @@ async function harparse(pageId: string): Promise<void> {
   }
   let requests: any[] = [];
   try {
+    logger.debug(`[Request] save: ${requestArray.length}`);
     requests = await RequestModel.insertMany(requestArray, { ordered: false });
-    logger.debug(`[Request]: ${requests.length}`);
+    logger.debug(`[Request] saved: ${requests.length}`);
   } catch (err: any) {
     logger.error(`[Request] ${err}`);
   }
 
   let responses: any[] = [];
   try {
+    logger.debug(`[Response] save: ${responseArray.length}`);
     responses = await ResponseModel.insertMany(responseArray, {
       ordered: false,
       //rawResult: true,
     });
-    logger.debug(`[Response]: ${responses.length}`);
+    logger.debug(`[Response] saved: ${responses.length}`);
   } catch (err: any) {
     logger.error(`[Response] ${err}`);
   }
