@@ -14,7 +14,7 @@ archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
 async function savePayload(
   responseBuffer: Buffer,
-): Promise<string | undefined> {
+): Promise<mongoose.Types.ObjectId | undefined> {
   try {
     const md5Hash = crypto
       .createHash('md5')
@@ -26,14 +26,13 @@ async function savePayload(
       { new: true, upsert: true },
     ).exec();
     if (payload && typeof payload === 'object' && '_id' in payload) {
-      return (payload as { _id: mongoose.Types.ObjectId })._id.toString();
+      return payload._id as mongoose.Types.ObjectId;
     }
-    return undefined;
   } catch (err: any) {
     logger.error(err);
     console.log(err);
-    return undefined;
   }
+  return undefined;
 }
 
 async function saveResponse(
@@ -45,11 +44,11 @@ async function saveResponse(
   let text: string | undefined;
   let payloadId: string | undefined;
   const responseStatus: number = response.status;
-
+  /*
   if (responseBuffer) {
     payloadId = await savePayload(responseBuffer);
   }
-
+  */
   try {
     if (!text && responseStatus >= 200) {
       text = response.content.text;
@@ -167,21 +166,10 @@ async function createZip(
 
 async function saveHarfile(harfile: any, pageId: any): Promise<void> {
   const buf = fs.readFileSync(harfile);
-  logger.debug(buf.length);
+  //logger.debug(buf.length);
   const zipedHar = await createZip(buf, `${pageId}.har`, 'infected');
-  console.log(zipedHar.length);
-  /*
-  const archive = archiver.create('zip-encrypted', {
-    zlib: { level: 8 },
-    encryptionMethod: 'aes256',
-    password: 'infected',
-  } as unknown as ArchiverOptions);
-  archive.on('error', (err: Error) => {
-    console.log(err);
-  });
-  archive.append(buf, { name: `${pageId}.har` });
-  const archived = await archive.finalize();
-  */
+  //logger.debug(zipedHar.length);
+
   const newHarfile = new HarfileModel({
     webpage: pageId,
     har: zipedHar,
@@ -347,3 +335,4 @@ async function harparse(pageId: string): Promise<void> {
 }
 
 export default harparse;
+export { savePayload };

@@ -1,20 +1,20 @@
 // patchright here!
 import { BrowserContext, Page, chromium } from 'patchright';
 import Jimp from 'jimp';
-import * as path from 'node:path';
-import * as fs from 'fs';
 
-import WebpageModel from '../models/webpage';
+import WebpageModel, { webpageModelType } from '../models/webpage';
 import logger from './logger';
 import findProc from 'find-process';
 import crypto from 'crypto';
 import ScreenshotModel from '../models/screenshot';
-import savePayload from './playwgetSave';
+import { savePayload } from './playwgetSave';
 import mongoose from 'mongoose';
+import checkTurnstile from './turnstile';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
   page: Page,
+  webpage: any,
 ): Promise<void> {
   const browser = browserContext.browser();
   if (browser) {
@@ -45,14 +45,41 @@ async function pptrEventSet(
   page.on('domcontentloaded', () => {
     logger.debug('DOM content loaded');
   });
-  page.on('download', async (data) => {
-    console.log('Download started:', data.url());
-    const read = await data.createReadStream();
-    read.on('data', (chunk) => {
-      logger.debug(`Received ${chunk.length} bytes of data.`);
-    });
-    //await savePayload(read);
+  page.on('download', async (download) => {
+    logger.info(`Download started: ${download.url()}`);
+    async function readableToBuffer(readable: any): Promise<Buffer> {
+      return new Promise((resolve, reject) => {
+        const chunks: any = [];
+        readable.on('data', (chunk: Buffer) => {
+          logger.debug(`Received ${chunk.length} bytes of data.`);
+          chunks.push(chunk);
+        });
+        readable.on('error', () => {
+          logger.error('Error reading download stream');
+          reject;
+        });
+        readable.on('end', () => {
+          logger.info('Download stream ended.');
+          resolve(Buffer.concat(chunks));
+        });
+      });
+    }
+    const read = await download.createReadStream();
+    try {
+      const buffer: any = await readableToBuffer(read);
+      logger.debug(`Downloaded ${buffer.length} bytes of data.`);
+      const payloadId: any = await savePayload(buffer);
+      if (payloadId) {
+        logger.debug(`Payload saved with ID: ${payloadId}`);
+        webpage.payload = payloadId;
+        webpage.error = 'A file has been downloaded.';
+        await webpage.save();
+      }
+    } catch (err) {
+      logger.error(`Error processing download: ${err}`);
+    }
   });
+
   // Log all uncaught errors to the terminal
   page.on('pageerror', (exception) => {
     logger.error(`Uncaught exception: "${exception}"`);
@@ -79,7 +106,7 @@ async function genPage(webpage: any): Promise<{
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
     const page = await browserContext.newPage();
-    await pptrEventSet(browserContext, page);
+    await pptrEventSet(browserContext, page, webpage);
     return {
       page: page as Page,
       browserContext: browserContext as BrowserContext,
@@ -211,6 +238,12 @@ async function playwget(
       waitUntil: 'load',
     });
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
+    const solved = await checkTurnstile(page);
+    if (solved) {
+      await new Promise((done) =>
+        setTimeout(done, webpage.option.delay * 1000),
+      );
+    }
   } catch (err: any) {
     logger.error(err);
     webpage.error = err.message;
