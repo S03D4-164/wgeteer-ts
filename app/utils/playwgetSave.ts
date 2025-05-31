@@ -5,7 +5,6 @@ import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 import WebpageModel from '../models/webpage';
 import HarfileModel from '../models/harfile';
-import { IRequest } from '../models/request';
 import mongoose from 'mongoose';
 import * as fs from 'fs';
 import { getHostInfo } from './ipInfo';
@@ -115,7 +114,7 @@ async function saveResponse(
 async function saveRequest(
   request: any,
   pageId: mongoose.Types.ObjectId,
-): Promise<IRequest | undefined> {
+): Promise<any | undefined> {
   let redirectChain: string[] = [];
 
   const headers: any = request.headers;
@@ -164,17 +163,25 @@ async function createZip(
   });
 }
 
-async function saveHarfile(harfile: any, pageId: any): Promise<void> {
+async function saveHarfile(
+  harfile: any,
+  pageId: any,
+): Promise<string | undefined> {
   const buf = fs.readFileSync(harfile);
   //logger.debug(buf.length);
   const zipedHar = await createZip(buf, `${pageId}.har`, 'infected');
   //logger.debug(zipedHar.length);
 
-  const newHarfile = new HarfileModel({
+  const newHarfile: any = new HarfileModel({
     webpage: pageId,
     har: zipedHar,
   });
-  await newHarfile.save();
+  if (newHarfile) {
+    await newHarfile.save();
+    return newHarfile._id.toString();
+  } else {
+    return undefined;
+  }
 }
 
 async function harparse(pageId: string): Promise<void> {
@@ -259,7 +266,7 @@ async function harparse(pageId: string): Promise<void> {
         for (const res of responses) {
           for (const req of requests) {
             if (res.interceptionId === req.interceptionId) {
-              logger.debug(`${req.interceptionId}, ${res.interceptionId}`);
+              //logger.debug(`${req.interceptionId}, ${res.interceptionId}`);
               res.request = req;
               req.response = res;
               break;
@@ -321,14 +328,16 @@ async function harparse(pageId: string): Promise<void> {
           }
         }
       }
+      let harId;
+      if (recordHar && webpage) {
+        harId = await saveHarfile(recordHar, webpage._id);
+        if (harId) webpage.harfile = new mongoose.Types.ObjectId(harId);
+      }
       logger.debug(webpage.remoteAddress);
       await webpage?.save();
     } catch (err) {
       console.log(err);
     }
-  }
-  if (recordHar && webpage) {
-    saveHarfile(recordHar, webpage._id);
   }
 
   return;

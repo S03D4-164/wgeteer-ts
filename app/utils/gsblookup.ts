@@ -1,6 +1,5 @@
 import superagent from 'superagent';
 import WebsiteModel from '../models/website';
-import { IWebsite } from '../models/website';
 
 interface GSBResponse {
   matches?: any[];
@@ -37,7 +36,7 @@ async function gsbLookup(url: string): Promise<GSBResponse> {
 
 async function lookupSite(id: string): Promise<GSBResponse> {
   try {
-    const website: IWebsite | null = await WebsiteModel.findById(id);
+    const website: any = await WebsiteModel.findById(id);
     if (!website) {
       return { error: 'Website not found' };
     }

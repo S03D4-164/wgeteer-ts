@@ -1,16 +1,13 @@
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
-//import ScreenshotModel from '../models/screenshot';
-//import PayloadModel from '../models/payload';
 
 import puppeteer from './puppeteer';
 import antibotbrowser from './antibotbrowser';
 import { getHostInfo } from './ipInfo';
 import logger from './logger';
-import wapalyze from './wappalyzer';
 import { db, closeDB } from './database';
-import { saveRequest, saveResponse } from './requestResponse';
+import { saveRequest, saveResponse } from './wgeteerSave';
 import { saveFullscreenshot } from './screenshot';
 
 import { Browser, CDPSession, Page, Target } from 'puppeteer';
@@ -18,7 +15,6 @@ import mongoose from 'mongoose';
 import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';
-//import crypto from 'crypto';
 
 async function pptrEventSet(
   client: CDPSession,
@@ -440,12 +436,11 @@ async function wget(pageId: string): Promise<string | undefined> {
   async function docToArray(request: any): Promise<void> {
     try {
       //logger.debug('[Request] finished: ' + request.method() +request.url().slice(0,100));
-      const objectId = new mongoose.Types.ObjectId(pageId);
-      let req: any = await saveRequest(request, objectId);
+      let req: any = await saveRequest(request, pageId);
       const response = await request.response();
       let res;
       if (response) {
-        res = await saveResponse(response, req, responseCache);
+        res = await saveResponse(response, pageId, responseCache);
         if (res && responseArray != null) {
           responseArray.push(res);
         }

@@ -2,7 +2,7 @@
 import { BrowserContext, Page, chromium } from 'patchright';
 import Jimp from 'jimp';
 
-import WebpageModel, { webpageModelType } from '../models/webpage';
+import WebpageModel from '../models/webpage';
 import logger from './logger';
 import findProc from 'find-process';
 import crypto from 'crypto';
@@ -237,21 +237,67 @@ async function playwget(
       referer: webpage.option.referer,
       waitUntil: 'load',
     });
-    await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
+    const delay = webpage.option.delay * 500;
+    await new Promise((done) => setTimeout(done, delay));
+    // Turnstile check
     const solved = await checkTurnstile(page);
     if (solved) {
-      await new Promise((done) =>
-        setTimeout(done, webpage.option.delay * 1000),
-      );
+      await new Promise((done) => setTimeout(done, delay));
+    }
+    // execute actions
+    if (webpage.option.actions) {
+      const actions = webpage.option.actions;
+      const lines = actions.split('\r\n');
+      let limit = 3;
+      let ssarray: any[] = [];
+      for (let line of lines) {
+        let elem = line.split('>');
+        let action = elem[0]?.trim();
+        let target = elem[1]?.trim();
+        let input = elem[2]?.trim();
+        logger.debug(`action: ${action}, target: ${target}`);
+        if (action == 'click') {
+          await page.locator(target).click();
+        } else if (action == 'eval') {
+          await page.evaluate(target);
+        } else if (action == 'fill') {
+          await page.locator(target).pressSequentially(input);
+        } else if (action == 'press') {
+          await page.locator(target).press(input);
+        }
+        let ssobj: any = {};
+        let screenshot = await page.screenshot({
+          fullPage: false,
+          timeout: delay,
+        });
+        const resizedImg = await imgResize(screenshot);
+        if (resizedImg) {
+          ssobj.thumbnail = resizedImg.toString('base64');
+        }
+        let fullscreenshot = await page.screenshot({
+          fullPage: true,
+          timeout: delay,
+        });
+        let fss = await saveFullscreenshot(fullscreenshot);
+        if (fss) {
+          ssobj.full = new mongoose.Types.ObjectId(fss);
+        }
+        console.log(ssobj);
+        ssarray.push(ssobj);
+        await new Promise((done) => setTimeout(done, delay));
+        limit--;
+        if (limit <= 0) break;
+      }
+      console.log(ssarray);
+      if (ssarray.length > 0) {
+        webpage.screenshots = ssarray;
+      }
     }
   } catch (err: any) {
     logger.error(err);
     webpage.error = err.message;
   }
   logger.debug(`goto completed.`);
-
-  if (webpage.option.click) {
-  }
 
   try {
     webpage.url = page.url();

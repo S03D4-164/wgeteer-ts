@@ -1,6 +1,6 @@
 import superagent from 'superagent';
 import qs from 'querystring';
-import PayloadModel, { IPayload } from '../models/payload';
+import PayloadModel from '../models/payload';
 import logger from './logger';
 
 const ak = process.env.VTKEY;
@@ -36,7 +36,7 @@ async function vt(resource: string): Promise<VTFileReportResponse> {
 
 async function vtPayload(payloadId: string): Promise<VTFileReportResponse> {
   try {
-    const payload: IPayload | null = await PayloadModel.findById(payloadId);
+    const payload: any = await PayloadModel.findById(payloadId);
 
     if (!payload) {
       return { error: 'Payload not found' };

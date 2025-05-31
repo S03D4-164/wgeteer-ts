@@ -1,10 +1,9 @@
-import Jimp from 'jimp';
 import crypto from 'crypto';
 import ScreenshotModel from '../models/screenshot';
 import logger from './logger';
-import mongoose from 'mongoose';
-import { IScreenshot } from '../models/screenshot';
-async function saveFullscreenshot(fullscreenshot: string): Promise<string | undefined> {
+async function saveFullscreenshot(
+  fullscreenshot: string,
+): Promise<string | undefined> {
   try {
     const buff = Buffer.from(fullscreenshot, 'base64');
     const md5Hash = crypto.createHash('md5').update(buff).digest('hex');

@@ -1,12 +1,16 @@
 import crypto from 'crypto';
 import logger from './logger';
 import PayloadModel from '../models/payload';
-import { IRequest } from '../models/request';
 import mongoose from 'mongoose';
 
-async function savePayload(responseBuffer: Buffer): Promise<string | undefined> {
+async function savePayload(
+  responseBuffer: Buffer,
+): Promise<string | undefined> {
   try {
-    const md5Hash = crypto.createHash('md5').update(responseBuffer).digest('hex');
+    const md5Hash = crypto
+      .createHash('md5')
+      .update(responseBuffer)
+      .digest('hex');
     const payload = await PayloadModel.findOneAndUpdate(
       { md5: md5Hash },
       { payload: responseBuffer },
@@ -25,7 +29,7 @@ async function savePayload(responseBuffer: Buffer): Promise<string | undefined> 
 
 async function saveResponse(
   interceptedResponse: any,
-  request: IRequest,
+  pageId: string,
   responseCache: any[],
 ): Promise<any> {
   let responseBuffer: Buffer | undefined;
@@ -88,12 +92,14 @@ async function saveResponse(
     const newHeaders: any = {};
 
     for (const key of Object.keys(headers)) {
-      const newKey: string = key.includes('.') ? key.replace(/\./g, '\uff0e') : key;
+      const newKey: string = key.includes('.')
+        ? key.replace(/\./g, '\uff0e')
+        : key;
       newHeaders[newKey] = headers[key];
     }
 
     const response = {
-      webpage: request.webpage,
+      webpage: pageId,
       url,
       urlHash,
       status: interceptedResponse.status(),
@@ -122,7 +128,10 @@ async function saveResponse(
   }
 }
 
-async function saveRequest(interceptedRequest: any, pageId: mongoose.Types.ObjectId): Promise<IRequest | undefined> {
+async function saveRequest(
+  interceptedRequest: any,
+  pageId: string,
+): Promise<any> {
   let redirectChain: string[] = [];
   try {
     const chain: any[] = interceptedRequest.redirectChain();
@@ -138,7 +147,9 @@ async function saveRequest(interceptedRequest: any, pageId: mongoose.Types.Objec
   const headers: any = interceptedRequest.headers();
   const newHeaders: any = {};
   for (const key of Object.keys(headers)) {
-    const newKey: string = key.includes('.') ? key.replace(/\./g, '\uff0e') : key;
+    const newKey: string = key.includes('.')
+      ? key.replace(/\./g, '\uff0e')
+      : key;
     newHeaders[newKey] = headers[key];
   }
 

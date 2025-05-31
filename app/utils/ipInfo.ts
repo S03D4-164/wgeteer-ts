@@ -1,5 +1,5 @@
 import ResponseModel from '../models/response';
-import * as whois from 'node-xwhois';
+import * as whois from './node-xwhois';
 import { IP2Location } from './ip2location-nodejs';
 import logger from './logger';
 import net from 'net';
