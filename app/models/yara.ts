@@ -15,6 +15,9 @@ const yaraSchema = new Schema(
       type: String,
       unique: true,
     },
+    actions: {
+      type: String,
+    },
   },
   { timestamps: true },
 );

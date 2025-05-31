@@ -10,6 +10,7 @@ import ScreenshotModel from '../models/screenshot';
 import { savePayload } from './playwgetSave';
 import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
+import { yaraSource } from './yara';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -245,26 +246,17 @@ async function playwget(
       await new Promise((done) => setTimeout(done, delay));
     }
     // execute actions
+    let actions = await yaraSource(await page.content());
     if (webpage.option.actions) {
-      const actions = webpage.option.actions;
+      actions = webpage.option.actions;
+    }
+    if (actions && actions.length > 0) {
+      logger.debug(actions);
       const lines = actions.split('\r\n');
       let limit = 3;
       let ssarray: any[] = [];
       for (let line of lines) {
-        let elem = line.split('>');
-        let action = elem[0]?.trim();
-        let target = elem[1]?.trim();
-        let input = elem[2]?.trim();
-        logger.debug(`action: ${action}, target: ${target}`);
-        if (action == 'click') {
-          await page.locator(target).click();
-        } else if (action == 'eval') {
-          await page.evaluate(target);
-        } else if (action == 'fill') {
-          await page.locator(target).pressSequentially(input);
-        } else if (action == 'press') {
-          await page.locator(target).press(input);
-        }
+        // screenshot before action
         let ssobj: any = {};
         let screenshot = await page.screenshot({
           fullPage: false,
@@ -282,13 +274,28 @@ async function playwget(
         if (fss) {
           ssobj.full = new mongoose.Types.ObjectId(fss);
         }
-        console.log(ssobj);
+        //console.log(ssobj);
         ssarray.push(ssobj);
+        // actions
+        let elem = line.split('>');
+        let action = elem[0]?.trim();
+        let target = elem[1]?.trim();
+        let input = elem[2]?.trim();
+        logger.debug(`action: ${action}, target: ${target}`);
+        if (action == 'click') {
+          await page.locator(target).click();
+        } else if (action == 'eval') {
+          await page.evaluate(target);
+        } else if (action == 'fill') {
+          await page.locator(target).pressSequentially(input);
+        } else if (action == 'press') {
+          await page.locator(target).press(input);
+        }
         await new Promise((done) => setTimeout(done, delay));
         limit--;
         if (limit <= 0) break;
       }
-      console.log(ssarray);
+      //console.log(ssarray);
       if (ssarray.length > 0) {
         webpage.screenshots = ssarray;
       }
