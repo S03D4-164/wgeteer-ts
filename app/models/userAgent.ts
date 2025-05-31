@@ -1,11 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-interface IUserAgent extends Document {
-  name: string;
-  userAgent: string;
-}
-
-const userAgentSchema: Schema<IUserAgent> = new Schema({
+const userAgentSchema = new Schema({
   name: {
     type: String,
     trim: true,
@@ -16,12 +17,18 @@ const userAgentSchema: Schema<IUserAgent> = new Schema({
   },
 });
 
-const UserAgentModel: Model<IUserAgent> = mongoose.model<IUserAgent>('UserAgent', userAgentSchema);
+type userAgentModelType = InferSchemaType<typeof userAgentSchema>;
+
+const UserAgentModel = model<
+  userAgentModelType,
+  PaginateModel<userAgentModelType>
+>('UserAgent', userAgentSchema);
 
 const data = [
   {
     name: 'win10-chrome',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
   },
 ];
 

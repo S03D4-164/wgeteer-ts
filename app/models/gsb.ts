@@ -1,18 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-// Define the interface for the GSB document
-export interface IGSB extends Document {
-  api?: string;
-  url: string;
-  urlHash?: string;
-  result?: Record<string, unknown>;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-// Define the schema
-const gsbSchema = new Schema<IGSB>(
+const gsbSchema = new Schema(
   {
     api: {
       type: String,
@@ -33,11 +27,18 @@ const gsbSchema = new Schema<IGSB>(
   { timestamps: true },
 );
 
+type gsbModelType = InferSchemaType<typeof gsbSchema>;
+
 // Add plugins and indexes
-gsbSchema.plugin(mongoosePaginate);
+gsbSchema.plugin(paginate);
 gsbSchema.index({ createdAt: -1 });
 gsbSchema.index({ urlHash: 1 });
 
 // Export the model
-const GSBModel: Model<IGSB> = mongoose.model<IGSB>('gsb', gsbSchema);
+const GSBModel = model<gsbModelType, PaginateModel<gsbModelType>>(
+  'GSB',
+  gsbSchema,
+);
+
 export default GSBModel;
+export { gsbModelType };

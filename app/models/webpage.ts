@@ -29,11 +29,6 @@ const webpageSchema = new Schema(
     thumbnail: {
       type: String,
     },
-    thumbnails: [
-      {
-        type: String,
-      },
-    ],
     content: {
       type: String,
     },
@@ -71,7 +66,14 @@ const webpageSchema = new Schema(
     requests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Request' }],
     responses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Response' }],
     screenshot: { type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' },
-    screenshots: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' }],
+    screenshots: [
+      {
+        thumbnail: {
+          type: String,
+        },
+        full: { type: mongoose.Schema.Types.ObjectId, ref: 'Screenshot' },
+      },
+    ],
     payload: { type: mongoose.Schema.Types.ObjectId, ref: 'Payload' },
     harfile: { type: mongoose.Schema.Types.ObjectId, ref: 'Harfile' },
   },

@@ -1,25 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-export interface IWebsite extends Document {
-  url: string;
-  track: {
-    period: number;
-    counter: number;
-    option: Record<string, any>;
-  };
-  tag: Record<string, any>[];
-  gsb: {
-    lookup: Record<string, any>;
-  };
-  group: string[];
-  last: mongoose.Types.ObjectId;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-const websiteSchema: Schema<IWebsite> = new Schema(
+const websiteSchema = new Schema(
   {
     url: {
       type: String,
@@ -48,11 +35,15 @@ const websiteSchema: Schema<IWebsite> = new Schema(
   { timestamps: true },
 );
 
+type websiteModelType = InferSchemaType<typeof websiteSchema>;
+
+websiteSchema.plugin(paginate);
+
 websiteSchema.index({ updatedAt: -1 });
-//websiteSchema.index({url:1});
 
-websiteSchema.plugin(mongoosePaginate);
-
-const WebsiteModel: Model<IWebsite> = mongoose.model<IWebsite, mongoose.PaginateModel<IWebsite>>('Website', websiteSchema);
-
+const WebsiteModel = model<websiteModelType, PaginateModel<websiteModelType>>(
+  'Website',
+  websiteSchema,
+);
 export default WebsiteModel;
+export { websiteModelType };

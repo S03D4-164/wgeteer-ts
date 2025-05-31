@@ -1,12 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-export interface IHarfile extends Document {
-  har: Buffer;
-  webpage?: mongoose.Types.ObjectId;
-}
-
-const harfileSchema: Schema<IHarfile> = new Schema(
+const harfileSchema = new Schema(
   {
     har: {
       type: Buffer,
@@ -17,11 +17,14 @@ const harfileSchema: Schema<IHarfile> = new Schema(
   { timestamps: true },
 );
 
-harfileSchema.plugin(mongoosePaginate);
+type harfileModelType = InferSchemaType<typeof harfileSchema>;
 
-const HarfileModel: Model<IHarfile> = mongoose.model<
-  IHarfile,
-  mongoose.PaginateModel<IHarfile>
->('Harfile', harfileSchema);
+harfileSchema.plugin(paginate);
+
+const HarfileModel = model<harfileModelType, PaginateModel<harfileModelType>>(
+  'Harfile',
+  harfileSchema,
+);
 
 export default HarfileModel;
+export { harfileModelType };

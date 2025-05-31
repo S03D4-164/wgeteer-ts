@@ -1,22 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-export interface IRequest extends mongoose.Document {
-  url?: string;
-  method?: string;
-  resourceType?: string;
-  isNavigationRequest?: boolean;
-  postData?: string;
-  failure?: Record<string, unknown>;
-  headers?: Record<string, unknown>;
-  redirectChain?: string[];
-  createdAt?: Date;
-  interceptionId?: string;
-  webpage?: mongoose.Types.ObjectId;
-  response?: mongoose.Types.ObjectId;
-}
-
-const requestSchema = new mongoose.Schema({
+const requestSchema = new Schema({
   url: {
     type: String,
   },
@@ -48,15 +38,21 @@ const requestSchema = new mongoose.Schema({
   interceptionId: {
     type: String,
   },
-  webpage: { type: mongoose.Types.ObjectId, ref: "Webpage" },
-  response: { type: mongoose.Types.ObjectId, ref: "Response" },
+  webpage: { type: mongoose.Schema.Types.ObjectId, ref: 'Webpage' },
+  response: { type: mongoose.Schema.Types.ObjectId, ref: 'Response' },
 });
+
+type requestModelType = InferSchemaType<typeof requestSchema>;
 
 requestSchema.index({ createdAt: -1 });
 requestSchema.index({ webpage: 1 });
 
-requestSchema.plugin(mongoosePaginate);
+requestSchema.plugin(paginate);
 
-const RequestModel: Model<IRequest> = mongoose.model<IRequest, mongoose.PaginateModel<IRequest>>('Request', requestSchema);
+const RequestModel = model<requestModelType, PaginateModel<requestModelType>>(
+  'Request',
+  requestSchema,
+);
 
 export default RequestModel;
+export { requestModelType };

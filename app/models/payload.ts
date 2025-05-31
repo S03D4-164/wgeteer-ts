@@ -1,20 +1,13 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
-
-// Define the interface for the Payload document
-export interface IPayload extends Document {
-  payload: Buffer;
-  md5: string;
-  fileType: string;
-  vt?: Record<string, any>;
-  createdAt?: Date;
-  tag?: Record<string, any>[];
-  yara?: Record<string, any>;
-}
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
 // Define the schema
-const payloadSchema: Schema<IPayload> = new Schema(
+const payloadSchema = new Schema(
   {
     payload: {
       type: Buffer,
@@ -41,10 +34,15 @@ const payloadSchema: Schema<IPayload> = new Schema(
   { timestamps: true, read: 'secondaryPreferred' },
 );
 
+type payloadModelType = InferSchemaType<typeof payloadSchema>;
+
 payloadSchema.index({ createdAt: -1 });
-payloadSchema.plugin(mongoosePaginate);
+payloadSchema.plugin(paginate);
 
-// Export the model
-const PayloadModel: Model<IPayload> = mongoose.model<IPayload, mongoose.PaginateModel<IPayload>>('Payload', payloadSchema);
+const PayloadModel = model<payloadModelType, PaginateModel<payloadModelType>>(
+  'Payload',
+  payloadSchema,
+);
+
 export default PayloadModel;
-
+export { payloadModelType };

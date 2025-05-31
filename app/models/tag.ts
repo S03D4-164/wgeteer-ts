@@ -1,16 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-interface ITag extends Document {
-  key: string;
-  value: string;
-  description?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-const tagSchema: Schema<ITag> = new Schema(
+const tagSchema = new Schema(
   {
     key: {
       type: String,
@@ -29,11 +25,17 @@ const tagSchema: Schema<ITag> = new Schema(
   { timestamps: true },
 );
 
+type tagModelType = InferSchemaType<typeof tagSchema>;
+
+tagSchema.plugin(paginate);
+
 tagSchema.index({ createdAt: -1 });
 tagSchema.index({ key: 1, value: 1 }, { unique: true });
 
-tagSchema.plugin(mongoosePaginate);
-
-const TagModel: Model<ITag> = mongoose.model<ITag, mongoose.PaginateModel<ITag>>('Tag', tagSchema);
+const TagModel = model<tagModelType, PaginateModel<tagModelType>>(
+  'Tag',
+  tagSchema,
+);
 
 export default TagModel;
+export { tagModelType };

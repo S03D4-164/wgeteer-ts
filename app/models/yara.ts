@@ -1,15 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-interface IYara extends Document {
-  rule?: string;
-  name: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-const yaraSchema: Schema<IYara> = new Schema(
+const yaraSchema = new Schema(
   {
     rule: {
       type: String,
@@ -22,11 +19,15 @@ const yaraSchema: Schema<IYara> = new Schema(
   { timestamps: true },
 );
 
-yaraSchema.plugin(mongoosePaginate);
+type yaraModelType = InferSchemaType<typeof yaraSchema>;
+
+yaraSchema.plugin(paginate);
 
 yaraSchema.index({ updatedAt: -1 });
-//yaraSchema.index({name:1});
 
-const YaraModel: Model<IYara> = mongoose.model<IYara, mongoose.PaginateModel<IYara>>('Yara', yaraSchema);
-
+const YaraModel = model<yaraModelType, PaginateModel<yaraModelType>>(
+  'Yara',
+  yaraSchema,
+);
 export default YaraModel;
+export { yaraModelType };

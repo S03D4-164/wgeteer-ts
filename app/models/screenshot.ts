@@ -1,15 +1,12 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-//import { PaginateModel } from 'mongoose-paginate-v2';
+import mongoose, {
+  Schema,
+  InferSchemaType,
+  model,
+  PaginateModel,
+} from 'mongoose';
+import paginate from 'mongoose-paginate-v2';
 
-export interface IScreenshot extends Document {
-  screenshot: string;
-  md5?: string;
-  createdAt?: Date;
-  tag?: Record<string, any>[];
-}
-
-const screenshotSchema: Schema<IScreenshot> = new Schema(
+const screenshotSchema = new Schema(
   {
     screenshot: {
       type: String,
@@ -26,10 +23,16 @@ const screenshotSchema: Schema<IScreenshot> = new Schema(
   { timestamps: true },
 );
 
+type screenshotModelType = InferSchemaType<typeof screenshotSchema>;
+
 screenshotSchema.index({ createdAt: -1 });
 
-screenshotSchema.plugin(mongoosePaginate);
+screenshotSchema.plugin(paginate);
 
-const ScreenshotModel: Model<IScreenshot> = mongoose.model<IScreenshot, mongoose.PaginateModel<IScreenshot>>('Screenshot', screenshotSchema);
+const ScreenshotModel = model<
+  screenshotModelType,
+  PaginateModel<screenshotModelType>
+>('Screenshot', screenshotSchema);
 
 export default ScreenshotModel;
+export { screenshotModelType };
