@@ -7,7 +7,7 @@ import WebpageModel from '../models/webpage';
 import HarfileModel from '../models/harfile';
 import mongoose from 'mongoose';
 import * as fs from 'fs';
-import { getHostInfo } from './ipInfo';
+import { getHostInfo, setResponseIps } from './ipInfo';
 import archiver, { ArchiverOptions } from 'archiver';
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
@@ -40,16 +40,15 @@ async function saveResponse(
   pageId: mongoose.Types.ObjectId,
 ): Promise<any> {
   let responseBuffer: Buffer | undefined;
-  let text: string | undefined;
   let payloadId: string | undefined;
   const responseStatus: number = response.status;
-  /*
   if (responseBuffer) {
-    payloadId = await savePayload(responseBuffer);
+    //payloadId = await savePayload();
   }
-  */
+  let text: string | undefined;
   try {
-    if (!text && responseStatus >= 200) {
+    //if (!text && responseStatus >= 200) {
+    if (response.content && response.content.text) {
       text = response.content.text;
     }
   } catch (err: any) {
@@ -79,13 +78,17 @@ async function saveResponse(
     urlHash = crypto.createHash('md5').update(url).digest('hex');
   }
   const headers: any = response.headers;
+  let statusText: string | undefined;
+  if (response._failureText) {
+    statusText = response._failureText;
+  }
 
   const newResponse = {
     webpage: pageId,
     url,
-    urlHash: urlHash,
+    urlHash,
     status: response.status,
-    statusText: response.statusText,
+    statusText,
     //ok: response.ok,
     //remoteAddress: response.remoteAddress,
     headers,
@@ -279,6 +282,7 @@ async function harparse(pageId: string): Promise<void> {
         webpage.requests = requests;
       }
       if (responses) {
+        responses = await setResponseIps(responses);
         await ResponseModel.bulkSave(responses, { ordered: false });
         webpage.responses = responses;
 
@@ -306,7 +310,7 @@ async function harparse(pageId: string): Promise<void> {
         webpage.headers = finalResponse.headers;
         webpage.remoteAddress = finalResponse.remoteAddress;
         webpage.securityDetails = finalResponse.securityDetails;
-
+        /*
         if (webpage.remoteAddress?.ip) {
           logger.info(webpage.remoteAddress);
           let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
@@ -326,8 +330,9 @@ async function harparse(pageId: string): Promise<void> {
               webpage.remoteAddress.ip = hostinfo.ip;
             }
           }
-        }
+        }*/
       }
+
       let harId;
       if (recordHar && webpage) {
         harId = await saveHarfile(recordHar, webpage._id);

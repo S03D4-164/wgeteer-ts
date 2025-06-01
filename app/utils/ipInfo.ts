@@ -34,7 +34,10 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
       let bgp: any[] | undefined;
       try {
         if (net.isIPv4(ip)) {
-          bgp = await whois.bgpInfo(ip, 10000);
+          let bgpInfo = await whois.bgpInfo(ip, 10000);
+          bgp = [...new Set(bgpInfo.map((i: any) => JSON.stringify(i)))].map(
+            (i: any) => JSON.parse(i),
+          );
         }
       } catch (err) {
         logger.error(err);
@@ -69,7 +72,7 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
   return undefined;
 };
 
-const setResponseIp = async (responses: any[]): Promise<void> => {
+const setResponseIp = async (responses: any[]): Promise<any> => {
   const ips: { [key: string]: any[] } = {};
   for (const response of responses) {
     if (response.remoteAddress && response.remoteAddress.ip) {
@@ -81,7 +84,7 @@ const setResponseIp = async (responses: any[]): Promise<void> => {
       }
     }
   }
-
+  let resArray = [];
   for (const ip in ips) {
     const hostinfo = await getIpinfo(ip);
     if (hostinfo) {
@@ -92,7 +95,9 @@ const setResponseIp = async (responses: any[]): Promise<void> => {
         if (hostinfo.geoip) remoteAddress.geoip = hostinfo.geoip;
         if (hostinfo.ip) remoteAddress.ip = hostinfo.ip;
         else remoteAddress.ip = ip;
-
+        res.remoteAddress = remoteAddress;
+        resArray.push(res);
+        /*
         try {
           await ResponseModel.findOneAndUpdate(
             { _id: res._id },
@@ -101,9 +106,11 @@ const setResponseIp = async (responses: any[]): Promise<void> => {
         } catch (err) {
           logger.error(err);
         }
+        */
       }
     }
   }
+  return resArray;
 };
 
 export const getHostInfo = async (
