@@ -7,6 +7,7 @@ import WebpageModel from '../models/webpage';
 import HarfileModel from '../models/harfile';
 import mongoose from 'mongoose';
 import * as fs from 'fs';
+import { analyzePage, analyzeResponses } from './wappalyzer';
 import { getHostInfo, setResponseIps } from './ipInfo';
 import archiver, { ArchiverOptions } from 'archiver';
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
@@ -296,8 +297,8 @@ async function harparse(pageId: string): Promise<void> {
         webpage.requests = requests;
       }
       if (responses) {
-        responses = await setResponseIps(responses);
-        await ResponseModel.bulkSave(responses, { ordered: false });
+        //responses = await setResponseIps(responses);
+        //await ResponseModel.bulkSave(responses, { ordered: false });
         webpage.responses = responses;
 
         if (webpage.url) {
@@ -324,27 +325,25 @@ async function harparse(pageId: string): Promise<void> {
         webpage.headers = finalResponse.headers;
         webpage.remoteAddress = finalResponse.remoteAddress;
         webpage.securityDetails = finalResponse.securityDetails;
-        /*
+
+        const wapps = await analyzePage(webpage);
+        if (wapps) webpage.wappalyzer = wapps;
+
         if (webpage.remoteAddress?.ip) {
           logger.info(webpage.remoteAddress);
           let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
+          logger.info(hostinfo);
           if (hostinfo) {
-            if (hostinfo.reverse) {
-              webpage.remoteAddress.reverse = hostinfo.reverse;
-            }
-            if (hostinfo.bgp) {
-              hostinfo.bgp.forEach((item: any) =>
-                webpage.remoteAddress?.bgp.push(item),
-              );
-            }
-            if (hostinfo.geoip) {
-              webpage.remoteAddress?.geoip.push(hostinfo.geoip);
-            }
-            if (hostinfo.ip) {
-              webpage.remoteAddress.ip = hostinfo.ip;
-            }
+            const remoteAddress: any = {};
+            if (hostinfo.reverse) remoteAddress.reverse = hostinfo.reverse;
+            if (hostinfo.bgp) remoteAddress.bgp = hostinfo.bgp;
+            if (hostinfo.geoip) remoteAddress.geoip = hostinfo.geoip;
+            if (hostinfo.ip) remoteAddress.ip = hostinfo.ip;
+            else remoteAddress.ip = webpage.remoteAddress.ip;
+            remoteAddress.port = webpage.remoteAddress.port;
+            webpage.remoteAddress = remoteAddress;
           }
-        }*/
+        }
       }
 
       let harId;
@@ -354,6 +353,8 @@ async function harparse(pageId: string): Promise<void> {
       }
       logger.debug(webpage.remoteAddress);
       await webpage?.save();
+      responses = await analyzeResponses(responses);
+      setResponseIps(responses);
     } catch (err) {
       console.log(err);
     }

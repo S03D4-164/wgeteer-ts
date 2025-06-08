@@ -1,1 +1,1 @@
-export { Wappalyzer } from './Wappalyzer';
+export { Wappalyzer, technologies, categories } from './Wappalyzer';

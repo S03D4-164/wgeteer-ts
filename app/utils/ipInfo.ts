@@ -19,10 +19,15 @@ interface HostInfo {
 
 const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
   try {
-    const ipArray: string[] | undefined = await whois.extractIP(host);
-    const ip = ipArray ? ipArray[0] : undefined;
-
-    if (ip && net.isIP(ip)) {
+    let ip: string | undefined;
+    if (net.isIP(host)) {
+      ip = host;
+    } else {
+      const ipArray: string[] | undefined = await whois.extractIP(host);
+      ip = ipArray ? ipArray[0] : undefined;
+    }
+    //console.log(host, ip);
+    if (ip) {
       let reverses: string[] = [];
       try {
         reverses = await dns.reverse(ip);
@@ -63,13 +68,13 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
         geoip: geo,
         ip: ip,
       };
-      logger.info(ipInfo);
+      //logger.info(ipInfo);
       return ipInfo;
     }
   } catch (err) {
     logger.error(err);
+    return undefined;
   }
-  return undefined;
 };
 
 const setResponseIp = async (responses: any[]): Promise<any> => {
@@ -98,7 +103,6 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
         remoteAddress.port = res.remoteAddress.port;
         res.remoteAddress = remoteAddress;
         resArray.push(res);
-        /*
         try {
           await ResponseModel.findOneAndUpdate(
             { _id: res._id },
@@ -107,7 +111,6 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
         } catch (err) {
           logger.error(err);
         }
-        */
       }
     }
   }
@@ -118,6 +121,7 @@ export const getHostInfo = async (
   host: string,
 ): Promise<HostInfo | undefined> => {
   const hostinfo = await getIpinfo(host);
+  //console.log(host, hostinfo);
   return hostinfo;
 };
 

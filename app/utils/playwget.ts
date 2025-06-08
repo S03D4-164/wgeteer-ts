@@ -17,12 +17,15 @@ async function pptrEventSet(
   page: Page,
   webpage: any,
 ): Promise<void> {
+  /*
   const browser = browserContext.browser();
   if (browser) {
     browser.on('disconnected', () => logger.debug('browser disconnected'));
   }
   browserContext.on('close', () => logger.debug('browserContext closed'));
-
+  page.on('domcontentloaded', () => {
+    logger.debug('DOM content loaded');
+  });
   page.on('request', (request: any) => {
     //logger.debug(`Request: ${request.url()}`);
   });
@@ -30,11 +33,12 @@ async function pptrEventSet(
     const res = await request.response();
     logger.debug(`Finished: ${res.url()}`);
   });
-  page.on('requestfailed', (request: any) => {
-    logger.debug(`Failed: ${request.failure().errorText} ${request.url()}`);
-  });
   page.on('close', () => {
     logger.debug('Page closed');
+  });
+  */
+  page.on('requestfailed', (request: any) => {
+    logger.debug(`Failed: ${request.failure().errorText} ${request.url()}`);
   });
   page.on('crash', () => {
     console.log('Page crashed');
@@ -43,8 +47,9 @@ async function pptrEventSet(
   page.on('load', () => {
     logger.debug('Page loaded');
   });
-  page.on('domcontentloaded', () => {
-    logger.debug('DOM content loaded');
+  // Log all uncaught errors to the terminal
+  page.on('pageerror', (exception) => {
+    logger.error(`Uncaught exception: "${exception}"`);
   });
   page.on('download', async (download) => {
     logger.info(`Download started: ${download.url()}`);
@@ -79,11 +84,6 @@ async function pptrEventSet(
     } catch (err) {
       logger.error(`Error processing download: ${err}`);
     }
-  });
-
-  // Log all uncaught errors to the terminal
-  page.on('pageerror', (exception) => {
-    logger.error(`Uncaught exception: "${exception}"`);
   });
 }
 
