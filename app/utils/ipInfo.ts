@@ -95,6 +95,7 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
         if (hostinfo.geoip) remoteAddress.geoip = hostinfo.geoip;
         if (hostinfo.ip) remoteAddress.ip = hostinfo.ip;
         else remoteAddress.ip = ip;
+        remoteAddress.port = res.remoteAddress.port;
         res.remoteAddress = remoteAddress;
         resArray.push(res);
         /*

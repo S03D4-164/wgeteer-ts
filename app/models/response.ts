@@ -5,14 +5,10 @@ import mongoose, {
   PaginateModel,
 } from 'mongoose';
 import paginate from 'mongoose-paginate-v2';
-/*
-import { mongoosastic } from 'mongoosastic-ts';
-import {
-  MongoosasticDocument,
-  MongoosasticModel,
-  MongoosasticPluginOpts,
-} from 'mongoosastic-ts/dist/types';
-*/
+import mongoosastic from 'mongoosastic';
+import { Client } from '@elastic/elasticsearch';
+const esClient = new Client({ node: 'http://127.0.0.1:9200' });
+esClient.info().then(console.log, console.log);
 
 const responseSchema = new Schema(
   {
@@ -35,6 +31,12 @@ const responseSchema = new Schema(
     text: {
       type: String,
       es_indexed: true,
+    },
+    mimeType: {
+      type: String,
+    },
+    encoding: {
+      type: String,
     },
     remoteAddress: {
       ip: { type: String },
@@ -76,7 +78,13 @@ const responseSchema = new Schema(
 type responseModelType = InferSchemaType<typeof responseSchema>;
 
 responseSchema.plugin(paginate);
-//responseSchema.plugin(mongoosastic);
+responseSchema.plugin(mongoosastic as any, {
+  esClient: esClient,
+  bulk: {
+    size: 10, // preferred number of docs to bulk index
+    delay: 100, //milliseconds to wait for enough docs to meet size constraint
+  },
+});
 
 responseSchema.index({ createdAt: -1 });
 responseSchema.index({ urlHash: 1 });

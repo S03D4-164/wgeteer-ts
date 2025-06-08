@@ -1,8 +1,14 @@
+//import { addExtra } from 'puppeteer-extra';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+//import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
+
+puppeteer.use(StealthPlugin());
+
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 
-import puppeteer from './puppeteer';
 import antibotbrowser from './antibotbrowser';
 import { getHostInfo } from './ipInfo';
 import logger from './logger';
@@ -11,7 +17,6 @@ import { saveRequest, saveResponse } from './wgeteerSave';
 import { saveFullscreenshot } from './screenshot';
 
 import { Browser, CDPSession, Page, Target } from 'puppeteer';
-import mongoose from 'mongoose';
 import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';

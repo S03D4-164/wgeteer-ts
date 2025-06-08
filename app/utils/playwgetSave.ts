@@ -39,17 +39,29 @@ async function saveResponse(
   request: any,
   pageId: mongoose.Types.ObjectId,
 ): Promise<any> {
+  /*
   let responseBuffer: Buffer | undefined;
   let payloadId: string | undefined;
   const responseStatus: number = response.status;
   if (responseBuffer) {
-    //payloadId = await savePayload();
+    payloadId = await savePayload();
   }
+  */
   let text: string | undefined;
+  let mimeType: string | undefined;
+  let encoding: string | undefined;
   try {
     //if (!text && responseStatus >= 200) {
-    if (response.content && response.content.text) {
-      text = response.content.text;
+    if (response.content) {
+      if (response.content.text) {
+        text = response.content.text;
+      }
+      if (response.content.mimeType) {
+        mimeType = response.content.mimeType;
+      }
+      if (response.content.encoding) {
+        encoding = response.content.encoding;
+      }
     }
   } catch (err: any) {
     logger.error('[Response] failed on save text', err);
@@ -95,6 +107,8 @@ async function saveResponse(
     securityDetails,
     //payload: payloadId,
     text,
+    encoding,
+    mimeType,
     //interceptionId,
   };
 

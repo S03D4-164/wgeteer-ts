@@ -103,7 +103,7 @@ async function genPage(webpage: any): Promise<{
       //args: chromiumArgs,
       // do NOT add custom browser headers or userAgent
     });
-    const permissions = ['storage-access'];
+    const permissions = ['storage-access', 'notifications'];
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
     const page = await browserContext.newPage();
