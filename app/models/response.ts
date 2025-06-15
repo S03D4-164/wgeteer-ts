@@ -5,16 +5,18 @@ import mongoose, {
   PaginateModel,
 } from 'mongoose';
 import paginate from 'mongoose-paginate-v2';
+/*
 import mongoosastic from 'mongoosastic';
 import { Client } from '@elastic/elasticsearch';
 const esClient = new Client({ node: 'http://127.0.0.1:9200' });
 esClient.info().then(console.log, console.log);
+*/
 
 const responseSchema = new Schema(
   {
     url: {
       type: String,
-      es_indexed: true,
+      //es_indexed: true,
     },
     urlHash: {
       type: String,
@@ -30,7 +32,7 @@ const responseSchema = new Schema(
     },
     text: {
       type: String,
-      es_indexed: true,
+      //es_indexed: true,
     },
     mimeType: {
       type: String,
@@ -78,6 +80,7 @@ const responseSchema = new Schema(
 type responseModelType = InferSchemaType<typeof responseSchema>;
 
 responseSchema.plugin(paginate);
+/*
 responseSchema.plugin(mongoosastic as any, {
   esClient: esClient,
   bulk: {
@@ -85,6 +88,7 @@ responseSchema.plugin(mongoosastic as any, {
     delay: 100, //milliseconds to wait for enough docs to meet size constraint
   },
 });
+*/
 
 responseSchema.index({ createdAt: -1 });
 responseSchema.index({ urlHash: 1 });

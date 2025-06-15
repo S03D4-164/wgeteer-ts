@@ -79,6 +79,7 @@ const getIpinfo = async (host: string): Promise<HostInfo | undefined> => {
 
 const setResponseIp = async (responses: any[]): Promise<any> => {
   const ips: { [key: string]: any[] } = {};
+  let resArray = [];
   for (const response of responses) {
     if (response.remoteAddress && response.remoteAddress.ip) {
       const ip = response.remoteAddress.ip;
@@ -87,10 +88,14 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
       } else {
         ips[ip] = [response];
       }
+    } else {
+      resArray.push(response);
     }
   }
-  let resArray = [];
+  let count = 0;
   for (const ip in ips) {
+    count++;
+    console.log(`${count}/${Object.keys(ips).length}: ${ip}`);
     const hostinfo = await getIpinfo(ip);
     if (hostinfo) {
       for (const res of ips[ip]) {
