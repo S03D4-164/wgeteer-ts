@@ -52,8 +52,8 @@ async function saveResponse(
       responseBuffer = await interceptedResponse.buffer();
     }
   } catch (err: any) {
-    logger.error('[Response] failed on save buffer', err);
-    console.log('[Response] failed on save buffer', err);
+    logger.error(`[Response] failed on save buffer ${err}`);
+    //console.log('[Response] failed on save buffer', err);
   }
 
   if (responseBuffer) {
@@ -65,8 +65,8 @@ async function saveResponse(
       text = await interceptedResponse.text();
     }
   } catch (err: any) {
-    logger.error('[Response] failed on save text', err);
-    console.log('[Response] failed on save text', err);
+    logger.error(`[Response] failed on save text ${err}`);
+    //console.log('[Response] failed on save text', err);
   }
 
   let securityDetails: any = {};
@@ -123,7 +123,7 @@ async function saveResponse(
     return response;
   } catch (error: any) {
     logger.error(error);
-    console.log(error);
+    //console.log(error);
     return undefined;
   }
 }

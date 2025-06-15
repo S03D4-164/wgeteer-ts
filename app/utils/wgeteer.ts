@@ -1,9 +1,16 @@
-//import { addExtra } from 'puppeteer-extra';
-import puppeteer from 'puppeteer-extra';
+import { addExtra } from 'puppeteer-extra';
+//import puppeteer from 'puppeteer-core';
+import {
+  Browser,
+  CDPSession,
+  Page,
+  PuppeteerLifeCycleEvent,
+  Target,
+} from 'puppeteer-core';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-//import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
-
-puppeteer.use(StealthPlugin());
+import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
+const puppeteer = rebrowserPuppeteer;
+//puppeteer.use(StealthPlugin());
 
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
@@ -16,10 +23,10 @@ import { db, closeDB } from './database';
 import { saveRequest, saveResponse } from './wgeteerSave';
 import { saveFullscreenshot } from './screenshot';
 
-import { Browser, CDPSession, Page, Target } from 'puppeteer';
 import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';
+import checkTurnstile from './turnstile';
 
 async function pptrEventSet(
   client: CDPSession,
@@ -167,7 +174,7 @@ async function wget(pageId: string): Promise<string | undefined> {
   try {
     webpage = await WebpageModel.findById(pageId).exec();
   } catch (err) {
-    console.log(err);
+    //console.log(err);
     logger.error(err);
     return;
   }
@@ -188,7 +195,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       }
     }
   } catch (err) {
-    console.log(err);
+    //console.log(err);
     logger.error(err);
   }
 
@@ -233,7 +240,7 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   if (webpage.option?.proxy) {
     if (
-      webpage.option.proxy.match(/^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}:\d{1,5}$/)
+      webpage.option.proxy.match(/\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}:\d{1,5}$/)
     ) {
       chromiumArgs.push(`--proxy-server=${webpage.option.proxy}`);
     }
@@ -252,7 +259,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       if (webpage.option?.pptr === 'firefox') {
         console.log(executablePath);
         const browser = await puppeteer.launch({
-          product: 'firefox',
+          browser: 'firefox',
           //executablePath: executablePath,
         });
         const page = await browser.newPage();
@@ -291,14 +298,14 @@ async function wget(pageId: string): Promise<string | undefined> {
       } else {
         const browser = await puppeteer.launch({
           executablePath: executablePath,
-          headless: true,
-          //headless: false,
-          ignoreHTTPSErrors: true,
+          //headless: true,
+          headless: false,
+          //ignoreHTTPSErrors: true,
           //defaultViewport: { width: 1280, height: 720 },
           defaultViewport: null,
           dumpio: false,
           args: chromiumArgs,
-          product: product,
+          browser: product,
           ignoreDefaultArgs: ['--enable-automation'],
           userDataDir: `/tmp/${webpage._id}`,
           //protocolTimeout: webpage.option.timeout * 1000,
@@ -368,32 +375,28 @@ async function wget(pageId: string): Promise<string | undefined> {
     await client.send('Network.enable');
 
     if (product === 'chrome') {
-      await client.send('Network.setRequestInterception', {
-        patterns: ['*'].map((pattern) => ({
-          urlPattern: pattern,
-          interceptionStage: 'HeadersReceived',
-        })),
+      await client.send('Fetch.enable', {
+        patterns: [
+          {
+            urlPattern: '*',
+            requestStage: 'Response',
+          },
+        ],
       });
     }
 
     client.on(
-      'Network.requestIntercepted',
-      async ({ interceptionId, request, responseStatusCode }) => {
-        //console.log(`[Intercepted] ${requestId}, ${responseStatusCode}, ${isDownload}, ${request.url}`);
+      'Fetch.requestPaused',
+      async ({ requestId, request, responseStatusCode }) => {
+        console.log(
+          `[Intercepted] ${requestId}, ${responseStatusCode}, ${request.url}`,
+        );
         try {
           if (client) {
-            let response = await client.send(
-              'Network.getResponseBodyForInterception',
-              { interceptionId },
-            );
-            /*
-        console.log(
-          "[Intercepted]",
-          //requestId,
-          response.body.length,
-          response.base64Encoded,
-        );
-        */
+            let response = await client.send('Fetch.getResponseBody', {
+              requestId,
+            });
+
             let newBody = (response as { body: string; base64Encoded: boolean })
               .base64Encoded
               ? Buffer.from(
@@ -404,7 +407,7 @@ async function wget(pageId: string): Promise<string | undefined> {
             let cache = {
               url: request.url,
               body: newBody,
-              interceptionId: interceptionId,
+              interceptionId: requestId,
             };
             responseCache.push(cache);
           }
@@ -420,8 +423,8 @@ async function wget(pageId: string): Promise<string | undefined> {
 
         try {
           if (client)
-            await client.send('Network.continueInterceptedRequest', {
-              interceptionId,
+            await client.send('Fetch.continueRequest', {
+              requestId,
             });
           //console.log(`Continuing interception ${interceptionId}`)
         } catch (err: any) {
@@ -440,11 +443,16 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   async function docToArray(request: any): Promise<void> {
     try {
-      //logger.debug('[Request] finished: ' + request.method() +request.url().slice(0,100));
+      logger.debug(
+        `[Request] finished: ${request.method()} ${request.url().slice(0, 100)}`,
+      );
       let req: any = await saveRequest(request, pageId);
       const response = await request.response();
       let res;
       if (response) {
+        logger.debug(
+          `[Request] response: ${response.status()} ${response.url().slice(0, 100)}`,
+        );
         res = await saveResponse(response, pageId, responseCache);
         if (res && responseArray != null) {
           responseArray.push(res);
@@ -454,6 +462,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       if (req && requestArray != null) {
         requestArray.push(req);
       }
+      /*
       if (requestArray != null && requestArray != null) {
         console.log(
           req.interceptionId,
@@ -464,9 +473,10 @@ async function wget(pageId: string): Promise<string | undefined> {
           request.url().slice(0, 100),
         );
       }
+        */
     } catch (error: any) {
-      //logger.error(error);
-      console.log(error);
+      logger.error(error);
+      //console.log(error);
     }
   }
 
@@ -489,14 +499,19 @@ async function wget(pageId: string): Promise<string | undefined> {
     await dialog.dismiss();
   });
 
+  let waitUntil: PuppeteerLifeCycleEvent = 'load';
+  if (webpage.option.dom) {
+    waitUntil = 'domcontentloaded';
+  }
   try {
     await page.goto(webpage.input, {
       timeout: webpage.option.timeout * 1000,
       referer: webpage.option.referer,
-      waitUntil: 'load',
+      waitUntil: waitUntil,
     });
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
-
+    const checked = await checkTurnstile(page);
+    /*
     // click cloudflare checkbox
     if (webpage.option.cf) {
       const selector = '.spacer > div > div';
@@ -531,11 +546,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       );
       //await page.mouse.move(click_x, click_y, { steps: 1 });
       await page.mouse.click(click_x, click_y);
-
-      await new Promise((done) =>
-        setTimeout(done, webpage.option.delay * 1000),
-      );
-    }
+    }*/
   } catch (err: any) {
     //logger.info(err);
     console.log(err);
@@ -597,35 +608,62 @@ async function wget(pageId: string): Promise<string | undefined> {
     setTimeout(done, webpage.option.delay * 1000 * 4),
   );
   */
-  let requests;
-  try {
-    requests = await RequestModel.insertMany(requestArray, { ordered: false });
-  } catch (err: any) {
-    console.log('[Request]', err);
-    logger.error(err);
+  let requests = (await RequestModel.find({ webpage })) || [];
+  if (requests.length == 0) {
+    try {
+      let start = new Date();
+      logger.debug(`[Request] save: ${requestArray.length}`);
+      //console.log(requestArray);
+      requests = await RequestModel.insertMany(requestArray, {
+        ordered: false,
+      });
+      let end = new Date();
+      let time = Number(end) - Number(start);
+      logger.debug(
+        `[Request] saved: ${requests.length} Execution time: ${time}ms`,
+      );
+    } catch (err: any) {
+      logger.error(`[Request] ${err}`);
+    }
   }
 
-  let responses: any[] = [];
-  try {
-    responses = await ResponseModel.insertMany(responseArray, {
-      ordered: false,
-      //rawResult: true,
-    });
-  } catch (err: any) {
-    console.log('[Response]', err);
-    logger.error(err);
+  let responses = (await ResponseModel.find({ webpage })) || [];
+  if (responses.length == 0) {
+    if (webpage.option.bulksave) {
+      try {
+        let start = new Date();
+        logger.debug(`[Response] bulk save: ${responseArray.length}`);
+        responses = await ResponseModel.insertMany(responseArray, {
+          ordered: false,
+          //rawResult: true,
+        });
+        let end = new Date();
+        let time = Number(end) - Number(start);
+        logger.debug(
+          `[Response] bulk saved: ${responses.length} Execution time: ${time}ms`,
+        );
+      } catch (err: any) {
+        logger.error(`[Response] ${err}`);
+      }
+    }
   }
   if (responses.length == 0) {
+    let start = new Date();
+    logger.debug(`[Response] save: ${responseArray.length}`);
     for (let res of responseArray) {
       try {
         const newRes = new ResponseModel(res);
         await newRes.save();
         responses.push(newRes);
       } catch (err) {
-        console.log('[Response]', err);
-        logger.error(err);
+        logger.error(`[Response] ${err}`);
       }
     }
+    let end = new Date();
+    let time = Number(end) - Number(start);
+    logger.debug(
+      `[Response] saved: ${responses.length} Execution time: ${time}ms`,
+    );
   }
 
   let finalResponse: any;
@@ -634,9 +672,9 @@ async function wget(pageId: string): Promise<string | undefined> {
       for (const res of responses) {
         for (const req of requests) {
           //console.log(req.interceptionId, res.interceptionId);
-          if (res.interceptionId === req.interceptionId) {
-            res.request = req;
-            req.response = res;
+          if (res.url === req.url) {
+            res.request = req._id;
+            req.response = res._id;
             break;
           }
         }
