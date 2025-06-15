@@ -8,7 +8,7 @@ export default async (agenda: Agenda) => {
   agenda.define('playwget', async (job: any, done) => {
     logger.info(job.attrs.data);
     const data = job.attrs.data;
-    if (data.count > 1) {
+    if (data.count > 0) {
       logger.error(`playwget failed: ${data.pageId}`);
       done();
     } else {

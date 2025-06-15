@@ -1,13 +1,10 @@
 // patchright here!
 import { BrowserContext, Page, chromium } from 'patchright';
-import Jimp from 'jimp';
 
 import WebpageModel from '../models/webpage';
 import logger from './logger';
 import findProc from 'find-process';
-import crypto from 'crypto';
-import ScreenshotModel from '../models/screenshot';
-import { savePayload } from './playwgetSave';
+import { savePayload, saveFullscreenshot, imgResize } from './playwgetSave';
 import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
@@ -23,9 +20,6 @@ async function pptrEventSet(
     browser.on('disconnected', () => logger.debug('browser disconnected'));
   }
   browserContext.on('close', () => logger.debug('browserContext closed'));
-  page.on('domcontentloaded', () => {
-    logger.debug('DOM content loaded');
-  });
   page.on('request', (request: any) => {
     //logger.debug(`Request: ${request.url()}`);
   });
@@ -33,25 +27,28 @@ async function pptrEventSet(
     const res = await request.response();
     logger.debug(`Finished: ${res.url()}`);
   });
-  page.on('close', () => {
-    logger.debug('Page closed');
-  });
-  */
   page.on('requestfailed', (request: any) => {
     logger.debug(`Failed: ${request.failure().errorText} ${request.url()}`);
   });
   page.on('crash', () => {
     console.log('Page crashed');
   });
-  page.on('dialog', (dialog) => dialog.dismiss());
-  page.on('load', () => {
+  */
+  page.once('domcontentloaded', () => {
+    logger.debug('DOM content loaded');
+  });
+  page.once('close', () => {
+    logger.debug('Page closed');
+  });
+  page.once('load', () => {
     logger.debug('Page loaded');
   });
+  page.on('dialog', (dialog) => dialog.dismiss());
   // Log all uncaught errors to the terminal
   page.on('pageerror', (exception) => {
     logger.error(`Uncaught exception: "${exception}"`);
   });
-  page.on('download', async (download) => {
+  page.once('download', async (download) => {
     logger.info(`Download started: ${download.url()}`);
     async function readableToBuffer(readable: any): Promise<Buffer> {
       return new Promise((resolve, reject) => {
@@ -103,7 +100,7 @@ async function genPage(webpage: any): Promise<{
       //args: chromiumArgs,
       // do NOT add custom browser headers or userAgent
     });
-    const permissions = ['storage-access', 'notifications'];
+    const permissions = ['notifications'];
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
     const page = await browserContext.newPage();
@@ -116,36 +113,6 @@ async function genPage(webpage: any): Promise<{
     logger.error(err);
   }
   return { page: null as any, browserContext: null as any };
-}
-
-async function imgResize(buffer: Buffer): Promise<Buffer> {
-  const res = await Jimp.read(buffer);
-  if (res.getWidth() > 240) {
-    res.resize(240, Jimp.AUTO);
-  }
-  return res.getBufferAsync(Jimp.MIME_PNG);
-}
-
-async function saveFullscreenshot(buff: Buffer): Promise<string | undefined> {
-  try {
-    const md5Hash = crypto.createHash('md5').update(buff).digest('hex');
-    const fullscreenshot = buff.toString('base64');
-    let ss: any = await ScreenshotModel.findOneAndUpdate(
-      { md5: md5Hash },
-      { screenshot: fullscreenshot },
-      { new: true, upsert: true },
-    ).exec();
-
-    if (ss) {
-      return ss._id.toString();
-    } else {
-      logger.warn('Screenshot not saved.');
-      return undefined;
-    }
-  } catch (err: any) {
-    logger.error(err);
-    return undefined;
-  }
 }
 
 //async function playwget(pageId: string): Promise<string | undefined> {
@@ -231,12 +198,16 @@ async function playwget(
     await page.setExtraHTTPHeaders(exHeaders);
   }
   await page.setViewportSize({ width: 1280, height: 720 });
-
+  let waitUntilOption: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' =
+    'load';
+  if (webpage.option?.dom) {
+    waitUntilOption = 'domcontentloaded';
+  }
   try {
     await page.goto(webpage.input, {
       timeout: webpage.option.timeout * 1000,
       referer: webpage.option.referer,
-      waitUntil: 'load',
+      waitUntil: 'domcontentloaded',
     });
     const delay = webpage.option.delay * 500;
     await new Promise((done) => setTimeout(done, delay));
@@ -310,19 +281,31 @@ async function playwget(
     webpage.url = page.url();
     webpage.title = await page.title();
     webpage.content = await page.content();
+    /*
     let screenshot = await page.screenshot({
       fullPage: false,
-      timeout: webpage.option.delay * 1000,
-    });
+      timeout: webpage.option.delay * 10000,
+      animations: 'disabled',
+    });*/
+    const base64ss = (
+      await (
+        await page.context().newCDPSession(page)
+      ).send('Page.captureScreenshot', {
+        captureBeyondViewport: true,
+        optimizeForSpeed: true,
+      })
+    ).data;
+    let screenshot = Buffer.from(base64ss, 'base64');
     const resizedImg = await imgResize(screenshot);
     webpage.thumbnail = resizedImg.toString('base64');
-    let fullscreenshot = await page.screenshot({
+    /*let fullscreenshot = await page.screenshot({
       fullPage: true,
-      timeout: webpage.option.delay * 1000,
-    });
+      timeout: webpage.option.delay * 10000,
+    });*/
+    let fullscreenshot = screenshot;
     let fss = await saveFullscreenshot(fullscreenshot);
     if (fss) {
-      webpage.screenshot = fss;
+      webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
   } catch (err: any) {
     logger.error(err);

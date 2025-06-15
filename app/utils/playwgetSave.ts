@@ -5,12 +5,49 @@ import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 import WebpageModel from '../models/webpage';
 import HarfileModel from '../models/harfile';
+import ScreenshotModel from '../models/screenshot';
+
 import mongoose from 'mongoose';
 import * as fs from 'fs';
 import { analyzePage, analyzeResponses } from './wappalyzer';
 import { getHostInfo, setResponseIps } from './ipInfo';
 import archiver, { ArchiverOptions } from 'archiver';
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
+
+import Jimp from 'jimp';
+
+async function imgResize(buffer: Buffer): Promise<Buffer> {
+  let image = await Jimp.read(buffer);
+  if (image.getWidth() > 240) {
+    //res.resize(240, Jimp.AUTO);
+    let resized = image.resize(240, Jimp.AUTO);
+    image = resized.crop(0, 0, 240, 135);
+  }
+  return image.getBufferAsync(Jimp.MIME_PNG);
+}
+
+async function saveFullscreenshot(buff: Buffer): Promise<string | undefined> {
+  try {
+    const md5Hash = crypto.createHash('md5').update(buff).digest('hex');
+    const fullscreenshot = buff.toString('base64');
+
+    let ss: any = await ScreenshotModel.findOneAndUpdate(
+      { md5: md5Hash },
+      { screenshot: fullscreenshot },
+      { new: true, upsert: true, strict: true },
+    ).exec();
+
+    if (ss) {
+      return ss._id.toString();
+    } else {
+      logger.warn('Screenshot not saved.');
+      return undefined;
+    }
+  } catch (err: any) {
+    logger.error(err);
+    return undefined;
+  }
+}
 
 async function savePayload(
   responseBuffer: Buffer,
@@ -62,6 +99,10 @@ async function saveResponse(
       }
       if (response.content.encoding) {
         encoding = response.content.encoding;
+        if (text && encoding == 'base64') {
+          text = Buffer.from(text, 'base64').toString();
+          encoding = undefined;
+        }
       }
     }
   } catch (err: any) {
@@ -114,7 +155,7 @@ async function saveResponse(
   };
 
   if (text) {
-    const sizelimit: number = 16000000;
+    const sizelimit: number = 16 * 1024 * 1024;
     const resLength: number = JSON.stringify(response).length;
     if (resLength > sizelimit) {
       newResponse.text = undefined;
@@ -213,68 +254,105 @@ async function harparse(pageId: string): Promise<void> {
   try {
     har = JSON.parse(fs.readFileSync(recordHar, 'utf-8'));
     const entries = har.log.entries;
-    let i = 0;
+    let i = 1;
     for (const entry of entries) {
-      let request = await saveRequest(
-        entry.request,
-        webpage?._id as mongoose.Types.ObjectId,
-      );
-      if (request) {
-        request.interceptionId = String(i);
-        //logger.debug(request);
-        requestArray.push(request);
+      if (!entry.request.url.startsWith('chrome-extension')) {
+        let request = await saveRequest(
+          entry.request,
+          webpage?._id as mongoose.Types.ObjectId,
+        );
+        if (request) {
+          request.interceptionId = String(i);
+          //logger.debug(request);
+          requestArray.push(request);
+        }
+        let response = await saveResponse(
+          entry.response,
+          entry.request,
+          webpage?._id as mongoose.Types.ObjectId,
+        );
+        if (response) {
+          response.interceptionId = String(i);
+          response.remoteAddress = {
+            ip: entry.serverIPAddress,
+            port: entry._serverPort,
+          };
+          response.securityDetails = entry._securityDetails;
+          //console.log(response);
+          responseArray.push(response);
+        }
+        i++;
       }
-      let response = await saveResponse(
-        entry.response,
-        entry.request,
-        webpage?._id as mongoose.Types.ObjectId,
-      );
-      if (response) {
-        response.interceptionId = String(i);
-        response.remoteAddress = {
-          ip: entry.serverIPAddress,
-          port: entry._serverPort,
-        };
-        response.securityDetails = entry._securityDetails;
-        //console.log(response);
-        responseArray.push(response);
-      }
-      i++;
     }
   } catch (error) {
     console.log(error);
   }
   let requests: any[] = [];
-  try {
-    logger.debug(`[Request] save: ${requestArray.length}`);
-    requests = await RequestModel.insertMany(requestArray, { ordered: false });
-    logger.debug(`[Request] saved: ${requests.length}`);
-  } catch (err: any) {
-    logger.error(`[Request] ${err}`);
+  requests = await RequestModel.find({ webpage });
+  if (requests.length == 0) {
+    try {
+      let start = new Date();
+      logger.debug(`[Request] save: ${requestArray.length}`);
+      requests = await RequestModel.insertMany(requestArray, {
+        ordered: false,
+      });
+      let end = new Date();
+      let time = Number(end) - Number(start);
+      logger.debug(
+        `[Request] saved: ${requests.length} Execution time: ${time}ms`,
+      );
+    } catch (err: any) {
+      logger.error(`[Request] ${err}`);
+    }
   }
-
   let responses: any[] = [];
-  try {
-    logger.debug(`[Response] save: ${responseArray.length}`);
-    responses = await ResponseModel.insertMany(responseArray, {
-      ordered: false,
-      //rawResult: true,
-    });
-    logger.debug(`[Response] saved: ${responses.length}`);
-  } catch (err: any) {
-    logger.error(`[Response] ${err}`);
-  }
+  responses = await ResponseModel.find({ webpage });
   if (responses.length == 0) {
-    for (let res of responseArray) {
+    if (webpage?.option.bulksave) {
       try {
-        const newRes = new ResponseModel(res);
-        await newRes.save();
-        responses.push(newRes);
-      } catch (err) {
-        console.log('[Response]', err);
+        let start = new Date();
+        logger.debug(`[Response] bulk save: ${responseArray.length}`);
+        responses = await ResponseModel.insertMany(responseArray, {
+          ordered: false,
+          //lean: true,
+          //rawResult: true,
+        });
+        let end = new Date();
+        let time = Number(end) - Number(start);
+        logger.debug(
+          `[Response] bulk saved: ${responses.length} Execution time: ${time}ms`,
+        );
+      } catch (err: any) {
         logger.error(`[Response] ${err}`);
       }
     }
+  }
+  if (responses.length == 0) {
+    let start = new Date();
+    logger.debug(`[Response] save: ${responseArray.length}`);
+    for (let res of responseArray) {
+      try {
+        /*
+        console.log(
+          res.interceptionId,
+          res.mimeType,
+          res.text?.length,
+          res.url,
+        );
+        */
+        const newRes = new ResponseModel(res);
+        await newRes.save({ validateBeforeSave: false, w: 0 });
+        //responses.push(newRes);
+      } catch (err) {
+        logger.error(`[Response] ${err}`);
+      }
+    }
+    responses = await ResponseModel.find({ webpage });
+    let end = new Date();
+    let time = Number(end) - Number(start);
+    logger.debug(
+      `[Response] saved: ${responses.length} Execution time: ${time}ms`,
+    );
   }
 
   if (webpage) {
@@ -294,11 +372,21 @@ async function harparse(pageId: string): Promise<void> {
       }
       if (requests) {
         await RequestModel.bulkSave(requests, { ordered: false });
+        requests = await RequestModel.find({ webpage }).sort({
+          interceptionId: 1,
+        });
         webpage.requests = requests;
       }
       if (responses) {
         //responses = await setResponseIps(responses);
-        //await ResponseModel.bulkSave(responses, { ordered: false });
+        await analyzeResponses(responses);
+        await ResponseModel.bulkSave(responses, {
+          ordered: false,
+          //timestamps: false,
+        });
+        responses = await ResponseModel.find({ webpage }).sort({
+          interceptionId: 1,
+        });
         webpage.responses = responses;
 
         if (webpage.url) {
@@ -364,4 +452,4 @@ async function harparse(pageId: string): Promise<void> {
 }
 
 export default harparse;
-export { savePayload };
+export { savePayload, saveFullscreenshot, imgResize };
