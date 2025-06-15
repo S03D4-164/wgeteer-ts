@@ -24,7 +24,7 @@ services:
       - 127.0.0.1:5900:5900
     working_dir: /home/node/app
     command: /bin/bash /home/node/app/entrypoint.sh
-    mem_limit: 2g
+    mem_limit: 4g
     #restart: always
     logging:
       driver: "json-file"

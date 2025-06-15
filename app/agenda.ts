@@ -14,6 +14,7 @@ const mongoConnectionString = 'mongodb://127.0.0.1:27017/wgeteer';
 
 mongoose
   .connect(mongoConnectionString, {
+    maxPoolSize: 1000,
     // useNewUrlParser: true,  // No longer required
     // useCreateIndex: true,   // No longer required
     // useFindAndModify: false, // No longer required
@@ -50,7 +51,9 @@ agenda.on('ready', async function () {
   await gsblookup(agenda);
   await gsblookupUrl(agenda);
 
-  const canceled = await agenda.cancel({ name: 'wgeteer' });
+  const canceled = await agenda.cancel({
+    name: ['wgeteer', 'playwget'],
+  });
   logger.debug(`canceled: ${canceled}`);
   await agenda.now('hello world', { time: new Date() });
   await agenda.start();
