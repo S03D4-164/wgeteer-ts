@@ -96,7 +96,21 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
   for (const ip in ips) {
     count++;
     console.log(`${count}/${Object.keys(ips).length}: ${ip}`);
-    const hostinfo = await getIpinfo(ip);
+    const cache = await ResponseModel.find({
+      createdAt: { $gt: new Date(Date.now() - 60 * 60 * 1000) },
+      'remoteAddress.ip': ip,
+      'remoteAddress.geoip': { $ne: [] },
+    })
+      .sort({ createdAt: -1 })
+      .exec();
+    let hostinfo;
+    if (cache.length > 0) {
+      //console.log(cache[0].remoteAddress);
+      hostinfo = cache[0].remoteAddress;
+    } else {
+      hostinfo = await getIpinfo(ip);
+    }
+    //console.log(hostinfo);
     if (hostinfo) {
       for (const res of ips[ip]) {
         const remoteAddress: any = {};
@@ -107,7 +121,9 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
         else remoteAddress.ip = ip;
         remoteAddress.port = res.remoteAddress.port;
         res.remoteAddress = remoteAddress;
+        //console.log(res.remoteAddress);
         resArray.push(res);
+        /*
         try {
           await ResponseModel.findOneAndUpdate(
             { _id: res._id },
@@ -116,9 +132,11 @@ const setResponseIp = async (responses: any[]): Promise<any> => {
         } catch (err) {
           logger.error(err);
         }
+        */
       }
     }
   }
+
   return resArray;
 };
 

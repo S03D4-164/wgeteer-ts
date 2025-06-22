@@ -1,23 +1,20 @@
-import { addExtra } from 'puppeteer-extra';
-//import puppeteer from 'puppeteer-core';
 import {
   Browser,
   CDPSession,
   Page,
   PuppeteerLifeCycleEvent,
-  Target,
 } from 'puppeteer-core';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
 const puppeteer = rebrowserPuppeteer;
-//puppeteer.use(StealthPlugin());
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 
 import antibotbrowser from './antibotbrowser';
-import { getHostInfo } from './ipInfo';
+import { analyzePage, analyzeResponses } from './wappalyzer';
+import { getHostInfo, setResponseIps } from './ipInfo';
 import logger from './logger';
 import { db, closeDB } from './database';
 import { saveRequest, saveResponse } from './wgeteerSave';
@@ -26,7 +23,7 @@ import { saveFullscreenshot } from './screenshot';
 import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';
-import checkTurnstile from './turnstile';
+//import checkTurnstile from './turnstile';
 
 async function pptrEventSet(
   client: CDPSession,
@@ -122,23 +119,8 @@ async function pptrEventSet(
   page.on("framedetached", (frm) => console.log("[Frame] detached: ", frm));
   page.on("framenavigateed", (frm) => console.log("[Frame] navigated: ", frm));
 
-  page.on('dialog', async (dialog) => {
-    console.log('[Page] dialog: ', dialog.type(), dialog.message());
-    await dialog.dismiss();
-  });
-  page.on('console', async (msg) => {
-    console.log('[Page] console: ', msg.type(), msg.text());
-  });
-  page.on('error', async (err) => {
-    console.log('[Page] error: ', err);
-  });
-  page.on('pageerror', async (perr) => {
-    console.log('[Page] page error: ', perr);
-  });
-
   page.on('workercreated', (wrkr) => console.log('[Worker] created: ', wrkr));
   page.on('workerdestroyed', (wrkr) => console.log('[Worker] destroyed: ', wrkr));
-  */
 
   page.on('request', async (interceptedRequest) => {
     try {
@@ -166,6 +148,20 @@ async function pptrEventSet(
     } catch (error) {
       console.log(error);
     }
+  });
+  */
+  page.on('dialog', async (dialog) => {
+    console.log('[Page] dialog: ', dialog.type(), dialog.message());
+    await dialog.dismiss();
+  });
+  page.on('console', async (msg) => {
+    console.log('[Page] console: ', msg.type(), msg.text());
+  });
+  page.on('error', async (err) => {
+    console.log('[Page] error: ', err);
+  });
+  page.on('pageerror', async (perr) => {
+    console.log('[Page] page error: ', perr);
   });
 }
 
@@ -222,14 +218,14 @@ async function wget(pageId: string): Promise<string | undefined> {
   const chromiumArgs = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
-    '--window-size=1280,720',
+    //'--window-size=1280,720',
     '--start-maximized',
     '--disable-gpu',
     '--disable-dev-shm-usage',
-    '--disable-web-security',
-    '--disable-features=BlockInsecurePrivateNetworkRequests',
-    '--devtools-flags=disable',
-    '--disable-features=IsolateOrigins',
+    //'--disable-web-security',
+    //'--disable-features=BlockInsecurePrivateNetworkRequests',
+    //'--devtools-flags=disable',
+    //'--disable-features=IsolateOrigins',
     /* Detected as a bot. Do not use.
      * '--disable-site-isolation-trials',
      */
@@ -271,8 +267,14 @@ async function wget(pageId: string): Promise<string | undefined> {
           await connect({
             headless: false,
             args: chromiumArgs,
-            //tf: true,
+            customConfig: {
+              //userDataDir: `/tmp/${webpage._id}`,
+            },
             turnstile: true,
+            connectOption: {
+              defaultViewport: null,
+            },
+            plugins: [StealthPlugin()],
           });
         const page = connectedPage as any;
         const browser = connectedBrowser as any;
@@ -443,16 +445,16 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   async function docToArray(request: any): Promise<void> {
     try {
-      logger.debug(
+      /*logger.debug(
         `[Request] finished: ${request.method()} ${request.url().slice(0, 100)}`,
-      );
+      );*/
       let req: any = await saveRequest(request, pageId);
       const response = await request.response();
       let res;
       if (response) {
-        logger.debug(
+        /*logger.debug(
           `[Request] response: ${response.status()} ${response.url().slice(0, 100)}`,
-        );
+        );*/
         res = await saveResponse(response, pageId, responseCache);
         if (res && responseArray != null) {
           responseArray.push(res);
@@ -510,7 +512,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       waitUntil: waitUntil,
     });
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
-    const checked = await checkTurnstile(page);
+    //const checked = await checkTurnstile(page);
     /*
     // click cloudflare checkbox
     if (webpage.option.cf) {
@@ -668,13 +670,20 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   let finalResponse: any;
   try {
+    let doneReq: any[] = [];
+    let doneRes: any[] = [];
     if (requests && responses) {
       for (const res of responses) {
         for (const req of requests) {
-          //console.log(req.interceptionId, res.interceptionId);
-          if (res.url === req.url) {
+          if (
+            res.url === req.url &&
+            !doneReq.includes(req._id) &&
+            !doneRes.includes(res._id)
+          ) {
             res.request = req._id;
             req.response = res._id;
+            doneReq.push(req._id);
+            doneRes.push(res._id);
             break;
           }
         }
@@ -685,6 +694,7 @@ async function wget(pageId: string): Promise<string | undefined> {
       webpage.requests = requests;
     }
     if (responses) {
+      responses = await analyzeResponses(responses);
       await ResponseModel.bulkSave(responses, { ordered: false });
       webpage.responses = responses;
 
@@ -712,6 +722,10 @@ async function wget(pageId: string): Promise<string | undefined> {
       webpage.headers = finalResponse.headers;
       webpage.remoteAddress = finalResponse.remoteAddress;
       webpage.securityDetails = finalResponse.securityDetails;
+
+      const wapps = await analyzePage(webpage);
+      if (wapps) webpage.wappalyzer = wapps;
+
       //console.log(webpage.status, webpage.error);
       if (webpage.remoteAddress?.ip) {
         console.log(webpage.remoteAddress);
@@ -732,35 +746,15 @@ async function wget(pageId: string): Promise<string | undefined> {
         }
       }
     }
+
+    await webpage.save();
+
     const cookies = await page.cookies();
     let headers = finalResponse?.headers || {};
     for (const head in headers) {
       if (typeof headers[head] === 'string') {
         headers[head] = headers[head].split(';');
       }
-    }
-    //console.log(cookies, headers);
-    /*
-    const wapalyzed = await wapalyze(
-      webpage.url,
-      headers,
-      webpage.content,
-      cookies,
-    );
-    let wapps: string[] = [];
-    for (const wap of wapalyzed) {
-      wapps.push(wap.name);
-    }
-    console.log(wapps);
-    if (wapps) {
-      webpage.wappalyzer = wapps;
-    }
-    */
-    await webpage.save();
-
-    //ss = null;
-    if (responses) {
-      //ipInfo.setResponseIp(responses);
     }
 
     /*
@@ -771,16 +765,25 @@ async function wget(pageId: string): Promise<string | undefined> {
 
     page.removeAllListeners();
 
-    //console.log(requestArray.length, responseArray.length);
-
     if (client) {
       await client.detach();
     }
 
     await browser.close();
     await closeDB(db);
+    responses = await setResponseIps(responses);
+    for (const res of responses) {
+      //console.log(res.remoteAddress);
+      try {
+        await ResponseModel.findOneAndUpdate(
+          { _id: res._id },
+          { remoteAddress: res.remoteAddress },
+        ).exec();
+      } catch (err) {
+        logger.error(err);
+      }
+    }
   } catch (err: any) {
-    console.log(err);
     logger.error(err);
   }
   return pageId;

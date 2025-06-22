@@ -76,6 +76,12 @@ const webpageSchema = new Schema(
     ],
     payload: { type: mongoose.Schema.Types.ObjectId, ref: 'Payload' },
     harfile: { type: mongoose.Schema.Types.ObjectId, ref: 'Harfile' },
+    favicon: [
+      {
+        url: String,
+        favicon: String,
+      },
+    ],
   },
   { timestamps: false },
 );

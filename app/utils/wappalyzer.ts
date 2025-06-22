@@ -32,20 +32,15 @@ for (const index of Array(27).keys()) {
 WappalyzerCore.setTechnologies(technologies);
 WappalyzerCore.setCategories(categories);
 
-const wapalyze = async (
-  url: string,
-  headers: any,
-  html: string,
-  cookies: any,
-) => {
+const wapalyze = async (url: string, headers: any, html: string) => {
   let result: any;
   const parsedHeaders = await parseHeaders(headers);
   try {
     const detections = await WappalyzerCore.analyze({
-      url: url,
+      url,
       headers: parsedHeaders,
-      cookies: cookies,
-      html: html,
+      html,
+      scriptSrc: [html],
     });
 
     result = WappalyzerCore.resolve(detections);
@@ -57,9 +52,17 @@ const wapalyze = async (
 };
 
 async function parseHeaders(headers: any) {
+  //console.log(headers);
   let parsedHeaders: any = {};
-  for (let header of headers) {
-    parsedHeaders[header.name.toLowerCase()] = [header.value];
+  try {
+    for (let header of headers) {
+      parsedHeaders[header.name.toLowerCase()] = [header.value];
+    }
+  } catch (err) {
+    const entries = Object.entries(headers);
+    for (const [key, value] of entries) {
+      parsedHeaders[key.toLowerCase()] = [value];
+    }
   }
   //console.log(parsedHeaders);
   return parsedHeaders;
@@ -68,8 +71,7 @@ async function parseHeaders(headers: any) {
 async function analyzeResponses(responses: any) {
   for (let res of responses) {
     if (res.url && res.text) {
-      let cookies;
-      const results = await wapalyze(res.url, res.headers, res.text, cookies);
+      const results = await wapalyze(res.url, res.headers, res.text);
       let wapps = [];
       for (let result of results) {
         if (result.confidence == 100) {
@@ -84,12 +86,10 @@ async function analyzeResponses(responses: any) {
 
 async function analyzePage(webpage: any) {
   if (webpage.url && webpage.content) {
-    let cookies;
     const results = await wapalyze(
       webpage.url,
       webpage.headers,
       webpage.content,
-      cookies,
     );
     let wapps = [];
     for (let result of results) {

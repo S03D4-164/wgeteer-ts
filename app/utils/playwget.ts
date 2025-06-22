@@ -8,6 +8,7 @@ import { savePayload, saveFullscreenshot, imgResize } from './playwgetSave';
 import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
+import explainCode from './gemini';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -203,13 +204,41 @@ async function playwget(
   if (webpage.option?.dom) {
     waitUntilOption = 'domcontentloaded';
   }
+
+  const client = await page.context().newCDPSession(page);
+  await client.send('Network.enable');
+
+  // Store the favicon data here
+  const faviconData: { [url: string]: any } = {};
+
+  // Listen for favicon responses
+  client.on('Network.responseReceived', async (params) => {
+    const { response, requestId } = params; // Extract requestId here
+    console.log(response.url);
+    if (
+      response.url.endsWith('favicon.ico') ||
+      response.url.includes('/favicon')
+    ) {
+      //console.log(`Favicon response received: ${response.url}`);
+      // Fetch response body via CDP using the correct requestId
+      const { body, base64Encoded } = await client.send(
+        'Network.getResponseBody',
+        { requestId },
+      );
+      // Store or process the favicon data
+      faviconData[response.url] = base64Encoded
+        ? Buffer.from(body, 'base64')
+        : body;
+    }
+  });
+
   try {
     await page.goto(webpage.input, {
       timeout: webpage.option.timeout * 1000,
       referer: webpage.option.referer,
       waitUntil: 'domcontentloaded',
     });
-    const delay = webpage.option.delay * 500;
+    const delay = webpage.option.delay * 1000;
     await new Promise((done) => setTimeout(done, delay));
     // Turnstile check
     const solved = await checkTurnstile(page);
@@ -224,7 +253,7 @@ async function playwget(
     if (actions && actions.length > 0) {
       logger.debug(actions);
       const lines = actions.split('\r\n');
-      let limit = 3;
+      let limit = 5;
       let ssarray: any[] = [];
       for (let line of lines) {
         // screenshot before action
@@ -288,9 +317,7 @@ async function playwget(
       animations: 'disabled',
     });*/
     const base64ss = (
-      await (
-        await page.context().newCDPSession(page)
-      ).send('Page.captureScreenshot', {
+      await client.send('Page.captureScreenshot', {
         captureBeyondViewport: true,
         optimizeForSpeed: true,
       })
@@ -307,6 +334,15 @@ async function playwget(
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
+    if (faviconData) {
+      for (const [url, data] of Object.entries(faviconData)) {
+        webpage.favicon.push({
+          url,
+          favicon: data.toString('base64'),
+        });
+      }
+    }
+    explainCode(webpage.content);
   } catch (err: any) {
     logger.error(err);
     if (!webpage.error) {

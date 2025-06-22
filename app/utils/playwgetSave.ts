@@ -15,6 +15,7 @@ import archiver, { ArchiverOptions } from 'archiver';
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
 import Jimp from 'jimp';
+import explainCode from './gemini';
 
 async function imgResize(buffer: Buffer): Promise<Buffer> {
   let image = await Jimp.read(buffer);
@@ -253,6 +254,7 @@ async function harparse(pageId: string): Promise<void> {
   let har;
   try {
     har = JSON.parse(fs.readFileSync(recordHar, 'utf-8'));
+    //explainCode(JSON.stringify(har));
     const entries = har.log.entries;
     let i = 1;
     for (const entry of entries) {
@@ -379,7 +381,7 @@ async function harparse(pageId: string): Promise<void> {
       }
       if (responses) {
         //responses = await setResponseIps(responses);
-        await analyzeResponses(responses);
+        responses = await analyzeResponses(responses);
         await ResponseModel.bulkSave(responses, {
           ordered: false,
           //timestamps: false,
@@ -441,8 +443,10 @@ async function harparse(pageId: string): Promise<void> {
       }
       logger.debug(webpage.remoteAddress);
       await webpage?.save();
-      responses = await analyzeResponses(responses);
-      setResponseIps(responses);
+      responses = await setResponseIps(responses);
+      await ResponseModel.bulkSave(responses, {
+        ordered: false,
+      });
     } catch (err) {
       console.log(err);
     }
