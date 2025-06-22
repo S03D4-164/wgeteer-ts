@@ -6,6 +6,7 @@ services:
       # load from .env
       - VTKEY
       - GSBKEY
+      - GEMINI_API_KEY
       - PPENGO
       - X11VNC_PASSWORD="password"
       - DISPLAY=:99
