@@ -1,0 +1,1 @@
+export { protectPage, protectedBrowser };
