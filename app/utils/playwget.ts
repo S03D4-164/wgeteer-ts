@@ -1,5 +1,10 @@
 // patchright here!
-import { BrowserContext, Page, chromium } from 'patchright';
+//import { BrowserContext, Page, chromium } from 'patchright';
+//import { BrowserContext, Page, chromium } from 'playwright-core';
+import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
+//process.env.REBROWSER_PATCHES_DEBUG = '1';
+process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
+import { protectIt } from './playwright-afp';
 
 import WebpageModel from '../models/webpage';
 import logger from './logger';
@@ -9,6 +14,7 @@ import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
 import explainCode from './gemini';
+//import flexDoc from './flexsearch';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -85,7 +91,10 @@ async function pptrEventSet(
   });
 }
 
-async function genPage(webpage: any): Promise<{
+async function genPage(
+  webpage: any,
+  chromiumArgs: any,
+): Promise<{
   page: Page;
   browserContext: BrowserContext;
 }> {
@@ -93,18 +102,20 @@ async function genPage(webpage: any): Promise<{
   logger.debug(`${dataDir}`);
   try {
     const browserContext = await chromium.launchPersistentContext(dataDir, {
+      //executablePath: process.env.CHROME_EXECUTABLE_PATH,
+      executablePath: '/usr/bin/google-chrome-stable',
       channel: 'chrome',
       headless: false,
       viewport: null,
       recordHar: { path: `${dataDir}/pw.har` },
       ignoreHTTPSErrors: true,
-      //args: chromiumArgs,
-      // do NOT add custom browser headers or userAgent
+      args: chromiumArgs,
     });
     const permissions = ['notifications'];
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
-    const page = await browserContext.newPage();
+    let page = await browserContext.newPage();
+    await protectIt(page, {});
     await pptrEventSet(browserContext, page, webpage);
     return {
       page: page as Page,
@@ -168,9 +179,13 @@ async function playwget(
     }
   }
   const chromiumArgs = [
-    '--window-size=1280,720',
+    '--no-sandbox',
     '--start-maximized',
+    '--disable-setuid-sandbox',
     '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-automation',
   ];
   if (webpage.option?.proxy) {
     if (
@@ -181,7 +196,7 @@ async function playwget(
   }
   logger.debug(webpage.option);
 
-  const { page, browserContext } = await genPage(webpage);
+  let { page, browserContext } = await genPage(webpage, chromiumArgs);
   if (!page || !browserContext) {
     logger.error('Failed to create page or browser context');
     return;
@@ -198,14 +213,15 @@ async function playwget(
   if (exHeaders) {
     await page.setExtraHTTPHeaders(exHeaders);
   }
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 768 });
   let waitUntilOption: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' =
     'load';
   if (webpage.option?.dom) {
     waitUntilOption = 'domcontentloaded';
   }
 
-  const client = await page.context().newCDPSession(page);
+  //const client = await page.context().newCDPSession(page);
+  /*
   await client.send('Network.enable');
 
   // Store the favicon data here
@@ -231,12 +247,12 @@ async function playwget(
         : body;
     }
   });
-
+  */
   try {
     await page.goto(webpage.input, {
       timeout: webpage.option.timeout * 1000,
       referer: webpage.option.referer,
-      waitUntil: 'domcontentloaded',
+      waitUntil: waitUntilOption,
     });
     const delay = webpage.option.delay * 1000;
     await new Promise((done) => setTimeout(done, delay));
@@ -308,7 +324,9 @@ async function playwget(
 
   try {
     webpage.url = page.url();
+    logger.debug(webpage.url);
     webpage.title = await page.title();
+    logger.debug(webpage.title);
     webpage.content = await page.content();
     /*
     let screenshot = await page.screenshot({
@@ -316,6 +334,7 @@ async function playwget(
       timeout: webpage.option.delay * 10000,
       animations: 'disabled',
     });*/
+    const client = await page.context().newCDPSession(page);
     const base64ss = (
       await client.send('Page.captureScreenshot', {
         captureBeyondViewport: true,
@@ -334,6 +353,7 @@ async function playwget(
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
+    /*
     if (faviconData) {
       for (const [url, data] of Object.entries(faviconData)) {
         webpage.favicon.push({
@@ -342,7 +362,8 @@ async function playwget(
         });
       }
     }
-    explainCode(webpage.content);
+    */
+    //explainCode(webpage.content);
   } catch (err: any) {
     logger.error(err);
     if (!webpage.error) {
@@ -350,6 +371,8 @@ async function playwget(
     }
   }
   await webpage.save();
+  logger.debug(`webpage saved: ${webpage._id}`);
+  //flexDoc(webpage);
   // Waits for all the reported 'request' events to resolve.
   page.removeAllListeners();
   await page.close();

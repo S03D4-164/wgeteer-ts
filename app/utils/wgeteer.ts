@@ -1,12 +1,18 @@
+process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
+//process.env.REBROWSER_PATCHES_DEBUG = 0;
 import {
   Browser,
   CDPSession,
   Page,
   PuppeteerLifeCycleEvent,
-} from 'puppeteer-core';
+} from 'rebrowser-puppeteer-core';
+//} from 'puppeteer-core';
+//import puppeteer from 'puppeteer-core';
 import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
 const puppeteer = rebrowserPuppeteer;
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { connect } from './puppeteer-real-browser';
+import { protectPage } from './puppeteer-afp';
 
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
@@ -20,10 +26,9 @@ import { db, closeDB } from './database';
 import { saveRequest, saveResponse } from './wgeteerSave';
 import { saveFullscreenshot } from './screenshot';
 
-import { connect } from 'puppeteer-real-browser';
 import findProc from 'find-process';
 import Jimp from 'jimp';
-//import checkTurnstile from './turnstile';
+import checkTurnstile from './turnstile';
 
 async function pptrEventSet(
   client: CDPSession,
@@ -136,7 +141,6 @@ async function pptrEventSet(
       console.log(error);
     }
   });
-
   page.on('response', async (interceptedResponse) => {
     try {
       console.log(
@@ -149,13 +153,13 @@ async function pptrEventSet(
       console.log(error);
     }
   });
+  page.on('console', async (msg) => {
+    console.log('[Page] console: ', msg.type(), msg.text());
+  });
   */
   page.on('dialog', async (dialog) => {
     console.log('[Page] dialog: ', dialog.type(), dialog.message());
     await dialog.dismiss();
-  });
-  page.on('console', async (msg) => {
-    console.log('[Page] console: ', msg.type(), msg.text());
   });
   page.on('error', async (err) => {
     console.log('[Page] error: ', err);
@@ -170,7 +174,6 @@ async function wget(pageId: string): Promise<string | undefined> {
   try {
     webpage = await WebpageModel.findById(pageId).exec();
   } catch (err) {
-    //console.log(err);
     logger.error(err);
     return;
   }
@@ -191,7 +194,6 @@ async function wget(pageId: string): Promise<string | undefined> {
       }
     }
   } catch (err) {
-    //console.log(err);
     logger.error(err);
   }
 
@@ -217,11 +219,13 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   const chromiumArgs = [
     '--no-sandbox',
-    '--disable-setuid-sandbox',
-    //'--window-size=1280,720',
     '--start-maximized',
+    '--disable-setuid-sandbox',
     '--disable-gpu',
     '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-automation',
+    '--window-size=1280,720',
     //'--disable-web-security',
     //'--disable-features=BlockInsecurePrivateNetworkRequests',
     //'--devtools-flags=disable',
@@ -255,13 +259,14 @@ async function wget(pageId: string): Promise<string | undefined> {
       if (webpage.option?.pptr === 'firefox') {
         console.log(executablePath);
         const browser = await puppeteer.launch({
-          browser: 'firefox',
+          //browser: 'firefox',
           //executablePath: executablePath,
         });
         const page = await browser.newPage();
         let setTarget: any;
         return { page: page as Page, browser, setTarget };
       } else if (webpage.option?.pptr === 'real') {
+        // puppeteer real browser
         process.env.CHROME_PATH = executablePath;
         const { page: connectedPage, browser: connectedBrowser } =
           await connect({
@@ -278,10 +283,12 @@ async function wget(pageId: string): Promise<string | undefined> {
           });
         const page = connectedPage as any;
         const browser = connectedBrowser as any;
+        /*
         await page.setViewport({
           width: 1280,
           height: 720,
         });
+        */
         return { page, browser, setTarget };
       } else if (webpage.option?.pptr === 'antibot') {
         const antibrowser = await antibotbrowser.startbrowser(
@@ -298,16 +305,16 @@ async function wget(pageId: string): Promise<string | undefined> {
         let setTarget: any;
         return { page, browser, setTarget };
       } else {
+        // rebrowser puppeteer
         const browser = await puppeteer.launch({
           executablePath: executablePath,
-          //headless: true,
           headless: false,
           //ignoreHTTPSErrors: true,
           //defaultViewport: { width: 1280, height: 720 },
           defaultViewport: null,
           dumpio: false,
           args: chromiumArgs,
-          browser: product,
+          //browser: product,
           ignoreDefaultArgs: ['--enable-automation'],
           userDataDir: `/tmp/${webpage._id}`,
           //protocolTimeout: webpage.option.timeout * 1000,
@@ -340,6 +347,7 @@ async function wget(pageId: string): Promise<string | undefined> {
     logger.debug(
       `${browserVersion}, ${browserProc?.pid}, ${page}, ${setTarget}`,
     );
+    page = await protectPage(page, {});
   } catch (error: any) {
     logger.error(error);
     webpage.error = error.message;
@@ -420,7 +428,6 @@ async function wget(pageId: string): Promise<string | undefined> {
               `[Intercepted] ${err.message} ${responseStatusCode} ${request.url}`,
             );
           }
-          //console.log("[Intercepted] error", err);
         }
 
         try {
@@ -478,7 +485,6 @@ async function wget(pageId: string): Promise<string | undefined> {
         */
     } catch (error: any) {
       logger.error(error);
-      //console.log(error);
     }
   }
 
@@ -512,46 +518,13 @@ async function wget(pageId: string): Promise<string | undefined> {
       waitUntil: waitUntil,
     });
     await new Promise((done) => setTimeout(done, webpage.option.delay * 1000));
-    //const checked = await checkTurnstile(page);
-    /*
-    // click cloudflare checkbox
-    if (webpage.option.cf) {
-      const selector = '.spacer > div > div';
-      const info = await page.evaluate((selector) => {
-        const el: any = document.querySelector(selector);
-        let zoom = 1.0;
-        for (let e = el; e != null; e = e.parentElement) {
-          if (e.style.zoom) {
-            zoom *= parseFloat(e.style.zoom);
-          }
-        }
-        const rect = el.getBoundingClientRect();
-        return {
-          height: rect.height,
-          width: rect.width,
-          x: rect.left,
-          y: rect.top,
-          zoom: zoom,
-        };
-      }, selector);
-      //console.log(info);
-      const center_height = info.height / 2;
-      //const center_width = info.width / 2;
-      const click_x = (info.x + center_height) * info.zoom;
-      const click_y = (info.y + center_height) * info.zoom;
-      console.log(
-        'move: %s(%s) => (%s,%s)',
-        selector,
-        JSON.stringify(info),
-        click_x,
-        click_y,
+    const checked = await checkTurnstile(page);
+    if (checked)
+      await new Promise((done) =>
+        setTimeout(done, webpage.option.delay * 1000),
       );
-      //await page.mouse.move(click_x, click_y, { steps: 1 });
-      await page.mouse.click(click_x, click_y);
-    }*/
   } catch (err: any) {
-    //logger.info(err);
-    console.log(err);
+    logger.error(err);
     webpage.error = err.message;
     //await page._client.send("Page.stopLoading");
   }
@@ -562,15 +535,11 @@ async function wget(pageId: string): Promise<string | undefined> {
 
   try {
     webpage.url = page.url();
-    if (responseArray.length > 0) {
-      webpage.title = await page.title();
-      webpage.content = await page.content();
-    }
+    logger.debug(webpage.url);
     let screenshot = await page.screenshot({
       fullPage: false,
       encoding: 'base64',
     });
-
     async function imgResize(data: string): Promise<Buffer> {
       const buffer = Buffer.from(data, 'base64');
       const res = await Jimp.read(buffer);
@@ -579,22 +548,23 @@ async function wget(pageId: string): Promise<string | undefined> {
       }
       return res.getBufferAsync(Jimp.MIME_PNG);
     }
-
     const resizedImg = await imgResize(screenshot);
     webpage.thumbnail = resizedImg.toString('base64');
-
     let fullscreenshot = await page.screenshot({
       fullPage: true,
       encoding: 'base64',
     });
-
     let fss = await saveFullscreenshot(fullscreenshot);
     if (fss) {
       webpage.screenshot = fss;
     }
+    if (responseArray.length > 0) {
+      webpage.title = await page.title();
+      logger.debug(webpage.title);
+      webpage.content = await page.content();
+    }
   } catch (error: any) {
-    //logger.info(error);
-    console.log(error);
+    logger.error(error);
     if (!webpage.error) {
       webpage.error = error.message;
     }
