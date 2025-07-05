@@ -93,6 +93,7 @@ webpageSchema.plugin(paginate);
 webpageSchema.index({ createdAt: -1 });
 webpageSchema.index({ content: 'text' });
 webpageSchema.index({ input: 1, createdAt: -1 });
+webpageSchema.index({ 'yara.rules.id': 1 });
 
 const WebpageModel = model<webpageModelType, PaginateModel<webpageModelType>>(
   'Webpage',
