@@ -1,6 +1,3 @@
-// patchright here!
-//import { BrowserContext, Page, chromium } from 'patchright';
-//import { BrowserContext, Page, chromium } from 'playwright-core';
 import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
 //process.env.REBROWSER_PATCHES_DEBUG = '1';
 process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
@@ -14,7 +11,9 @@ import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
 import explainCode from './gemini';
-//import flexDoc from './flexsearch';
+import flexDoc from './flexsearch';
+import fs from 'fs';
+import { execSync } from 'child_process';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -110,10 +109,13 @@ async function genPage(
       recordHar: { path: `${dataDir}/pw.har` },
       ignoreHTTPSErrors: true,
       args: chromiumArgs,
+      ignoreDefaultArgs: ['--enable-automation'], // hide infobar
     });
     const permissions = ['notifications'];
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
+    //const pages = browserContext.pages();
+    //let page = pages[0];
     let page = await browserContext.newPage();
     await protectIt(page, {});
     await pptrEventSet(browserContext, page, webpage);
@@ -186,6 +188,7 @@ async function playwget(
     '--disable-dev-shm-usage',
     '--disable-blink-features=AutomationControlled',
     '--disable-automation',
+    '--disable-infobars',
   ];
   if (webpage.option?.proxy) {
     if (
@@ -213,7 +216,7 @@ async function playwget(
   if (exHeaders) {
     await page.setExtraHTTPHeaders(exHeaders);
   }
-  await page.setViewportSize({ width: 1280, height: 768 });
+  await page.setViewportSize({ width: 1280, height: 700 });
   let waitUntilOption: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' =
     'load';
   if (webpage.option?.dom) {
@@ -353,6 +356,23 @@ async function playwget(
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
+    const pngPath = `/tmp/${webpage._id}/screenshot.png`;
+    const xwd = execSync(
+      `xwd -display :99 -root -silent | convert xwd:- png:${pngPath}`,
+    );
+    if (fs.existsSync(pngPath)) {
+      const pngData = fs.readFileSync(pngPath);
+      let ssobj: any = {};
+      const resizedImg = await imgResize(pngData);
+      if (resizedImg) {
+        ssobj.thumbnail = resizedImg.toString('base64');
+      }
+      let fss = await saveFullscreenshot(pngData);
+      if (fss) {
+        ssobj.full = new mongoose.Types.ObjectId(fss);
+      }
+      webpage.screenshots.push(ssobj);
+    }
     /*
     if (faviconData) {
       for (const [url, data] of Object.entries(faviconData)) {
@@ -377,12 +397,14 @@ async function playwget(
   page.removeAllListeners();
   await page.close();
 
-  browserContext.clearPermissions();
-  await browserContext.clearCookies();
-  //browserContext.removeAllListeners();
-  const browser = browserContext.browser();
-  await browserContext.close();
-  await browser?.close();
+  if (browserContext) {
+    browserContext.clearPermissions();
+    await browserContext.clearCookies();
+    //browserContext.removeAllListeners();
+    const browser = browserContext.browser();
+    await browserContext.close();
+    await browser?.close();
+  }
   return webpage._id;
 }
 
