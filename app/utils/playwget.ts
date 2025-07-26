@@ -1,7 +1,14 @@
-import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
+//import { BrowserContext, Page, chromium } from 'patchright';
+import {
+  Browser,
+  BrowserContext,
+  Page,
+  chromium,
+} from 'rebrowser-playwright-core';
 //process.env.REBROWSER_PATCHES_DEBUG = '1';
 process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
 import { protectIt } from './playwright-afp';
+//import { connect } from './playwright-real-browser';
 
 import WebpageModel from '../models/webpage';
 import logger from './logger';
@@ -14,6 +21,10 @@ import explainCode from './gemini';
 import flexDoc from './flexsearch';
 import fs from 'fs';
 import { execSync } from 'child_process';
+import { Xvfb } from './node-xvfb';
+import { spawn } from 'node:child_process';
+
+const dataDir = '/tmp/ppengo';
 
 async function pptrEventSet(
   browserContext: BrowserContext,
@@ -29,6 +40,7 @@ async function pptrEventSet(
   page.on('request', (request: any) => {
     //logger.debug(`Request: ${request.url()}`);
   });
+  */
   page.on('requestfinished', async (request: any) => {
     const res = await request.response();
     logger.debug(`Finished: ${res.url()}`);
@@ -39,7 +51,7 @@ async function pptrEventSet(
   page.on('crash', () => {
     console.log('Page crashed');
   });
-  */
+
   page.once('domcontentloaded', () => {
     logger.debug('DOM content loaded');
   });
@@ -89,6 +101,43 @@ async function pptrEventSet(
     }
   });
 }
+/*
+async function realPage(
+  webpage: any,
+  chromiumArgs: any,
+): Promise<{
+  page: Page;
+  browserContext: BrowserContext;
+}> {
+  //process.env.CHROME_PATH = executablePath;
+  await fs.promises.mkdir(`${dataDir}/${webpage._id}`, { recursive: true });
+  const { page: connectedPage, browser: connectedBrowser } = await connect({
+    headless: false,
+    args: chromiumArgs,
+    customConfig: {
+      userDataDir: `${dataDir}/${webpage._id}`,
+      executablePath: '/usr/bin/google-chrome-stable',
+    },
+    turnstile: true,
+    connectOption: {
+      defaultViewport: null,
+    },
+  });
+  console.log(chromiumArgs);
+
+  const page = connectedPage as any;
+  const browser = connectedBrowser as any;
+  const browserContext = browser.contexts()[0];
+  try {
+    await pptrEventSet(browserContext, page, webpage);
+    const browserVersion = await browser.version();
+    logger.debug(`${browserVersion}, ${page}`);
+  } catch (err) {
+    console.log(err);
+  }
+  return { page, browserContext };
+}
+*/
 
 async function genPage(
   webpage: any,
@@ -97,16 +146,16 @@ async function genPage(
   page: Page;
   browserContext: BrowserContext;
 }> {
-  const dataDir = `/tmp/${webpage._id}`;
-  logger.debug(`${dataDir}`);
+  const userDataDir = `${dataDir}/${webpage._id}`;
+  logger.debug(`${userDataDir}`);
   try {
-    const browserContext = await chromium.launchPersistentContext(dataDir, {
+    const browserContext = await chromium.launchPersistentContext(userDataDir, {
       //executablePath: process.env.CHROME_EXECUTABLE_PATH,
       executablePath: '/usr/bin/google-chrome-stable',
       channel: 'chrome',
       headless: false,
       viewport: null,
-      recordHar: { path: `${dataDir}/pw.har` },
+      recordHar: { path: `${userDataDir}/pw.har` },
       ignoreHTTPSErrors: true,
       args: chromiumArgs,
       ignoreDefaultArgs: ['--enable-automation'], // hide infobar
@@ -117,6 +166,7 @@ async function genPage(
     //const pages = browserContext.pages();
     //let page = pages[0];
     let page = await browserContext.newPage();
+    //if (webpage.option?.afp)
     await protectIt(page, {});
     await pptrEventSet(browserContext, page, webpage);
     return {
@@ -180,6 +230,7 @@ async function playwget(
       }
     }
   }
+  const displayNum = `${Math.floor(Math.random() * (99999 - 99)) + 99}`;
   const chromiumArgs = [
     '--no-sandbox',
     '--start-maximized',
@@ -189,6 +240,7 @@ async function playwget(
     '--disable-blink-features=AutomationControlled',
     '--disable-automation',
     '--disable-infobars',
+    `--display=:${displayNum}`,
   ];
   if (webpage.option?.proxy) {
     if (
@@ -199,7 +251,25 @@ async function playwget(
   }
   logger.debug(webpage.option);
 
+  const xvfb = new Xvfb({
+    displayNum,
+    reuse: false,
+    timeout: 1000,
+    silent: false,
+    xvfb_args: ['-screen', '0', '1280x720x24', '-ac'],
+  });
+  xvfb.startSync();
+  await new Promise((done) => setTimeout(done, 3000));
+
+  const fluxbox = spawn(
+    '/usr/bin/fluxbox',
+    ['-display', `:${displayNum}`, '-screen', '0'],
+    { detached: true, timeout: 5 * 60 * 1000 },
+  );
+  await new Promise((done) => setTimeout(done, 3000));
+
   let { page, browserContext } = await genPage(webpage, chromiumArgs);
+  //let { page, browserContext } = await realPage(webpage, chromiumArgs);
   if (!page || !browserContext) {
     logger.error('Failed to create page or browser context');
     return;
@@ -356,9 +426,9 @@ async function playwget(
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
-    const pngPath = `/tmp/${webpage._id}/screenshot.png`;
+    const pngPath = `${dataDir}/${webpage._id}/screenshot.png`;
     const xwd = execSync(
-      `xwd -display :99 -root -silent | convert xwd:- png:${pngPath}`,
+      `xwd -display :${displayNum} -root -silent | convert xwd:- png:${pngPath}`,
     );
     if (fs.existsSync(pngPath)) {
       const pngData = fs.readFileSync(pngPath);
@@ -390,20 +460,25 @@ async function playwget(
       webpage.error = err.message;
     }
   }
-  await webpage.save();
-  logger.debug(`webpage saved: ${webpage._id}`);
-  //flexDoc(webpage);
-  // Waits for all the reported 'request' events to resolve.
-  page.removeAllListeners();
-  await page.close();
 
-  if (browserContext) {
-    browserContext.clearPermissions();
-    await browserContext.clearCookies();
+  try {
+    await webpage.save();
+    //flexDoc(webpage);
+    // Waits for all the reported 'request' events to resolve.
+    //page.removeAllListeners();
+    //await page.close();
+    //await browserContext.clearPermissions();
+    //await browserContext.clearCookies();
     //browserContext.removeAllListeners();
     const browser = browserContext.browser();
     await browserContext.close();
+    await new Promise((done) => setTimeout(done, 1000));
     await browser?.close();
+    await new Promise((done) => setTimeout(done, 1000));
+    xvfb.stopSync();
+    logger.debug(`webpage saved: ${webpage._id}`);
+  } catch (err) {
+    logger.error(err);
   }
   return webpage._id;
 }

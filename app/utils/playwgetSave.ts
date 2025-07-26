@@ -245,7 +245,7 @@ async function saveHarfile(
 }
 
 async function harparse(pageId: string): Promise<void> {
-  const dataDir = `/tmp/${pageId}`;
+  const dataDir = `/tmp/ppengo/${pageId}`;
   const recordHar = `${dataDir}/pw.har`;
   logger.info(`${recordHar}`);
   let requestArray: any[] = [];
