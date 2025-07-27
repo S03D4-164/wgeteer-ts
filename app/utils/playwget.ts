@@ -18,7 +18,7 @@ import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
 import explainCode from './gemini';
-import flexDoc from './flexsearch';
+//import flexDoc from './flexsearch';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { Xvfb } from './node-xvfb';
@@ -277,6 +277,7 @@ async function playwget(
   );
   await new Promise((done) => setTimeout(done, 3000));
 
+  await fs.promises.mkdir(`${dataDir}/${webpage._id}`, { recursive: true });
   let { page, browserContext } = await genPage(webpage, chromiumArgs);
   //let { page, browserContext } = await realPage(webpage, chromiumArgs);
   if (!page || !browserContext) {
