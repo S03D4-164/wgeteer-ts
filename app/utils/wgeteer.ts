@@ -187,7 +187,10 @@ async function wget(pageId: string): Promise<string | undefined> {
     const list = await findProc('name', 'chrome');
     if (list) {
       for (const ps of list) {
-        if (ps.name === 'chrome' && ps.cmd.includes(`/tmp/${webpage._id}`)) {
+        if (
+          ps.name === 'chrome' &&
+          ps.cmd.includes(`/tmp/ppengo/${webpage._id}`)
+        ) {
           console.log('kill', ps);
           process.kill(ps.pid);
         }
@@ -247,7 +250,7 @@ async function wget(pageId: string): Promise<string | undefined> {
   }
   logger.debug(webpage.option);
 
-  const executablePath = '/usr/bin/google-chrome-stable';
+  //const executablePath = '/usr/bin/google-chrome-stable';
   const product = 'chrome';
 
   async function genPage(): Promise<{
@@ -256,24 +259,14 @@ async function wget(pageId: string): Promise<string | undefined> {
     setTarget: any;
   }> {
     try {
-      if (webpage.option?.pptr === 'firefox') {
-        console.log(executablePath);
-        const browser = await puppeteer.launch({
-          //browser: 'firefox',
-          //executablePath: executablePath,
-        });
-        const page = await browser.newPage();
-        let setTarget: any;
-        return { page: page as Page, browser, setTarget };
-      } else if (webpage.option?.pptr === 'real') {
+      if (webpage.option?.pptr === 'real') {
         // puppeteer real browser
-        process.env.CHROME_PATH = executablePath;
         const { page: connectedPage, browser: connectedBrowser } =
           await connect({
             headless: false,
             args: chromiumArgs,
             customConfig: {
-              //userDataDir: `/tmp/${webpage._id}`,
+              //userDataDir: `/tmp/ppengo/${webpage._id}`,
             },
             turnstile: true,
             connectOption: {
@@ -290,33 +283,17 @@ async function wget(pageId: string): Promise<string | undefined> {
         });
         */
         return { page, browser, setTarget };
-      } else if (webpage.option?.pptr === 'antibot') {
-        const antibrowser = await antibotbrowser.startbrowser(
-          9515,
-          webpage.input,
-        );
-        console.log(antibrowser);
-        const opt = {
-          browserWSEndpoint: antibrowser.websocket,
-        };
-        console.log(opt);
-        const browser = await puppeteer.connect(opt);
-        const page = await browser.newPage();
-        let setTarget: any;
-        return { page, browser, setTarget };
       } else {
         // rebrowser puppeteer
         const browser = await puppeteer.launch({
-          executablePath: executablePath,
           headless: false,
           //ignoreHTTPSErrors: true,
-          //defaultViewport: { width: 1280, height: 720 },
           defaultViewport: null,
           dumpio: false,
           args: chromiumArgs,
           //browser: product,
           ignoreDefaultArgs: ['--enable-automation'],
-          userDataDir: `/tmp/${webpage._id}`,
+          userDataDir: `/tmp/ppengo/${webpage._id}`,
           //protocolTimeout: webpage.option.timeout * 1000,
           /*targetFilter: (target) => {
             target.type() !== "other" || !!target.url();
@@ -333,7 +310,6 @@ async function wget(pageId: string): Promise<string | undefined> {
         return { page, browser, setTarget };
       }
     } catch (err: any) {
-      console.log(err);
       logger.error(err);
       throw err; // Re-throw the error to be caught in the outer scope
     }

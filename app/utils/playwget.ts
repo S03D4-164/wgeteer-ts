@@ -150,8 +150,8 @@ async function genPage(
   logger.debug(`${userDataDir}`);
   try {
     const browserContext = await chromium.launchPersistentContext(userDataDir, {
-      //executablePath: process.env.CHROME_EXECUTABLE_PATH,
-      executablePath: '/usr/bin/google-chrome-stable',
+      executablePath: process.env.CHROME_EXECUTABLE_PATH,
+      //executablePath: '/usr/bin/google-chrome-stable',
       channel: 'chrome',
       headless: false,
       viewport: null,
@@ -256,7 +256,16 @@ async function playwget(
     reuse: false,
     timeout: 1000,
     silent: false,
-    xvfb_args: ['-screen', '0', '1280x720x24', '-ac'],
+    xvfb_args: [
+      '-screen',
+      '0',
+      '1280x720x24',
+      '-ac',
+      '-nolisten',
+      'tcp',
+      '-nolisten',
+      'unix',
+    ],
   });
   xvfb.startSync();
   await new Promise((done) => setTimeout(done, 3000));

@@ -75,6 +75,7 @@ async function checkTurnstile(page: any): Promise<boolean> {
           const box = await parentElement.boundingBox();
           let x = box.x + 30;
           let y = box.y + box.height / 2;
+          console.log(x, y);
           await page.mouse.click(x, y);
         } catch (err) {}
       }

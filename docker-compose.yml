@@ -9,15 +9,17 @@ services:
       - GEMINI_API_KEY
       - PPENGO
       - X11VNC_PASSWORD="password"
-      - DISPLAY=:99
+      #- DISPLAY=:99
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
+      - CHROME_EXECUTABLE_PATH=/home/node/app/chrome/linux-123.0.6312.122/chrome-linux64/chrome
+      #- CHROME_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
     tty: true
     init: true
     container_name: wgeteer-ts
     volumes:
       - ./app:/home/node/app
       - ./data/npm/cache:/home/node/.npm
-      - ./data/npm/wgeteer:/home/node/app/node_modules
+      #- ./data/npm/wgeteer:/home/node/app/node_modules
       - ./data/webappanalyzer:/home/node/app/utils/webappanalyzer
       - ./data/IP2LOCATION-LITE-DB1.IPV6.BIN:/tmp/IP2LOCATION-LITE-DB1.IPV6.BIN
     network_mode: "host"
