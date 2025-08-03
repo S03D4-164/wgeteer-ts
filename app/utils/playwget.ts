@@ -66,6 +66,25 @@ async function pptrEventSet(
   page.on('pageerror', (exception) => {
     logger.error(`Uncaught exception: "${exception}"`);
   });
+  // download pdf
+  await page.route('**/*', async (route, request) => {
+    if (
+      request.resourceType() === 'document' &&
+      route.request().url().endsWith('.pdf')
+    ) {
+      const response = await page.context().request.get(request.url());
+      await route.fulfill({
+        response,
+        headers: {
+          ...response.headers(),
+          'Content-Disposition': 'attachment',
+        },
+      });
+    } else {
+      route.continue();
+    }
+  });
+
   page.once('download', async (download) => {
     logger.info(`Download started: ${download.url()}`);
     async function readableToBuffer(readable: any): Promise<Buffer> {
