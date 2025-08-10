@@ -39,6 +39,7 @@ const agenda = new Agenda({
   },
   processEvery: '5 seconds',
   defaultLockLifetime: 1000 * 60 * 3,
+  defaultConcurrency: 5,
 });
 
 agenda.on('ready', async function () {

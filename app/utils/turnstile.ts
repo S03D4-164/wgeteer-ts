@@ -80,6 +80,7 @@ async function checkTurnstile(page: any): Promise<boolean> {
         } catch (err) {}
       }
       clearInterval(waitInterval);
+      await new Promise((done) => setTimeout(done, 5000));
       resolve(true);
     } catch (err) {
       clearInterval(waitInterval);
