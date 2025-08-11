@@ -16,6 +16,41 @@ archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
 import Jimp from 'jimp';
 import explainCode from './gemini';
+import findProc from 'find-process';
+
+async function cleanup(pageId: string) {
+  const dataDir = '/tmp/ppengo';
+  try {
+    const displayNum = fs.readFileSync(
+      `${dataDir}/${pageId}/displayNum`,
+      'utf-8',
+    );
+    const list = await findProc('name', 'chrome');
+    if (list) {
+      for (const ps of list) {
+        //console.log(ps);
+        //chrome
+        if (ps.name === 'chrome' && ps.cmd.includes(`${dataDir}/${pageId}`)) {
+          console.log('kill', ps);
+          process.kill(ps.pid);
+        }
+        //Xvfb
+        if (ps.name === 'Xvfb' && ps.cmd.includes(`${displayNum}`)) {
+          console.log('kill', ps);
+          process.kill(ps.pid);
+        }
+        //fluxbox
+        if (ps.name === 'fluxbox' && ps.cmd.includes(`${displayNum}`)) {
+          console.log('kill', ps);
+          process.kill(ps.pid);
+        }
+      }
+    }
+    fs.rmSync(`${dataDir}/${pageId}`, { recursive: true, force: true });
+  } catch (err) {
+    logger.error(err);
+  }
+}
 
 async function imgResize(buffer: Buffer): Promise<Buffer> {
   let image = await Jimp.read(buffer);
@@ -360,18 +395,26 @@ async function harparse(pageId: string): Promise<void> {
   if (webpage) {
     let finalResponse: any;
     try {
+      let doneReq: any[] = [];
+      let doneRes: any[] = [];
       if (requests && responses) {
         for (const res of responses) {
           for (const req of requests) {
-            if (res.interceptionId === req.interceptionId) {
-              //logger.debug(`${req.interceptionId}, ${res.interceptionId}`);
-              res.request = req;
-              req.response = res;
+            if (
+              res.url === req.url &&
+              !doneReq.includes(req._id) &&
+              !doneRes.includes(res._id)
+            ) {
+              res.request = req._id;
+              req.response = res._id;
+              doneReq.push(req._id);
+              doneRes.push(res._id);
               break;
             }
           }
         }
       }
+
       if (requests) {
         await RequestModel.bulkSave(requests, { ordered: false });
         requests = await RequestModel.find({ webpage }).sort({
@@ -437,16 +480,17 @@ async function harparse(pageId: string): Promise<void> {
       }
 
       let harId;
-      if (recordHar && webpage) {
+      if (fs.existsSync(recordHar) && webpage) {
         harId = await saveHarfile(recordHar, webpage._id);
         if (harId) webpage.harfile = new mongoose.Types.ObjectId(harId);
       }
-      logger.debug(webpage.remoteAddress);
+      //logger.debug(webpage.remoteAddress);
       await webpage?.save();
       responses = await setResponseIps(responses);
       await ResponseModel.bulkSave(responses, {
         ordered: false,
       });
+      await cleanup(webpage._id.toString());
     } catch (err) {
       console.log(err);
     }
