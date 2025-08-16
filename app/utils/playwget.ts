@@ -1,10 +1,5 @@
-//import { BrowserContext, Page, chromium } from 'patchright';
-import {
-  Browser,
-  BrowserContext,
-  Page,
-  chromium,
-} from 'rebrowser-playwright-core';
+import { BrowserContext, Page, chromium } from 'patchright';
+//import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
 //process.env.REBROWSER_PATCHES_DEBUG = '1';
 process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
 import { protectIt } from './playwright-afp';
@@ -67,24 +62,25 @@ async function pptrEventSet(
     logger.error(`Uncaught exception: "${exception}"`);
   });
   // download pdf
-  await page.route('**/*', async (route, request) => {
-    if (
-      request.resourceType() === 'document' &&
-      route.request().url().endsWith('.pdf')
-    ) {
-      const response = await page.context().request.get(request.url());
-      await route.fulfill({
-        response,
-        headers: {
-          ...response.headers(),
-          'Content-Disposition': 'attachment',
-        },
-      });
-    } else {
-      route.continue();
-    }
-  });
-
+  if (webpage.option.pdf) {
+    await page.route('**/*', async (route, request) => {
+      if (
+        request.resourceType() === 'document' &&
+        route.request().url().endsWith('.pdf')
+      ) {
+        const response = await page.context().request.get(request.url());
+        await route.fulfill({
+          response,
+          headers: {
+            ...response.headers(),
+            'Content-Disposition': 'attachment',
+          },
+        });
+      } else {
+        route.continue();
+      }
+    });
+  }
   page.once('download', async (download) => {
     logger.info(`Download started: ${download.url()}`);
     async function readableToBuffer(readable: any): Promise<Buffer> {
@@ -297,6 +293,10 @@ async function playwget(
   await new Promise((done) => setTimeout(done, 3000));
 
   await fs.promises.mkdir(`${dataDir}/${webpage._id}`, { recursive: true });
+  await fs.promises.writeFile(
+    `${dataDir}/${webpage._id}/displayNum`,
+    displayNum,
+  );
   let { page, browserContext } = await genPage(webpage, chromiumArgs);
   //let { page, browserContext } = await realPage(webpage, chromiumArgs);
   if (!page || !browserContext) {

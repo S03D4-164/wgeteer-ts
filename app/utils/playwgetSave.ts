@@ -25,21 +25,33 @@ async function cleanup(pageId: string) {
       `${dataDir}/${pageId}/displayNum`,
       'utf-8',
     );
-    const list = await findProc('name', 'chrome');
-    if (list) {
-      for (const ps of list) {
+    //chrome
+    const chromePs = await findProc('name', 'chrome');
+    if (chromePs) {
+      for (const ps of chromePs) {
         //console.log(ps);
-        //chrome
         if (ps.name === 'chrome' && ps.cmd.includes(`${dataDir}/${pageId}`)) {
           console.log('kill', ps);
           process.kill(ps.pid);
         }
-        //Xvfb
+      }
+    }
+
+    //Xvfb
+    const xvfbPs = await findProc('name', 'Xvfb');
+    if (xvfbPs) {
+      for (const ps of xvfbPs) {
         if (ps.name === 'Xvfb' && ps.cmd.includes(`${displayNum}`)) {
           console.log('kill', ps);
           process.kill(ps.pid);
         }
-        //fluxbox
+      }
+    }
+
+    //fluxbox
+    const fluxboxPs = await findProc('name', 'fluxbox');
+    if (fluxboxPs) {
+      for (const ps of fluxboxPs) {
         if (ps.name === 'fluxbox' && ps.cmd.includes(`${displayNum}`)) {
           console.log('kill', ps);
           process.kill(ps.pid);
