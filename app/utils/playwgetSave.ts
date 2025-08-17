@@ -16,53 +16,8 @@ archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
 import Jimp from 'jimp';
 import explainCode from './gemini';
-import findProc from 'find-process';
 
-async function cleanup(pageId: string) {
-  const dataDir = '/tmp/ppengo';
-  try {
-    const displayNum = fs.readFileSync(
-      `${dataDir}/${pageId}/displayNum`,
-      'utf-8',
-    );
-    //chrome
-    const chromePs = await findProc('name', 'chrome');
-    if (chromePs) {
-      for (const ps of chromePs) {
-        //console.log(ps);
-        if (ps.name === 'chrome' && ps.cmd.includes(`${dataDir}/${pageId}`)) {
-          console.log('kill', ps);
-          process.kill(ps.pid);
-        }
-      }
-    }
-
-    //Xvfb
-    const xvfbPs = await findProc('name', 'Xvfb');
-    if (xvfbPs) {
-      for (const ps of xvfbPs) {
-        if (ps.name === 'Xvfb' && ps.cmd.includes(`${displayNum}`)) {
-          console.log('kill', ps);
-          process.kill(ps.pid);
-        }
-      }
-    }
-
-    //fluxbox
-    const fluxboxPs = await findProc('name', 'fluxbox');
-    if (fluxboxPs) {
-      for (const ps of fluxboxPs) {
-        if (ps.name === 'fluxbox' && ps.cmd.includes(`${displayNum}`)) {
-          console.log('kill', ps);
-          process.kill(ps.pid);
-        }
-      }
-    }
-    fs.rmSync(`${dataDir}/${pageId}`, { recursive: true, force: true });
-  } catch (err) {
-    logger.error(err);
-  }
-}
+import cleanup from './playwgetCleanup';
 
 async function imgResize(buffer: Buffer): Promise<Buffer> {
   let image = await Jimp.read(buffer);
@@ -502,7 +457,8 @@ async function harparse(pageId: string): Promise<void> {
       await ResponseModel.bulkSave(responses, {
         ordered: false,
       });
-      await cleanup(webpage._id.toString());
+      const displayNum = fs.readFileSync(`${dataDir}/displayNum`, 'utf-8');
+      await cleanup(webpage._id.toString(), displayNum);
     } catch (err) {
       console.log(err);
     }
