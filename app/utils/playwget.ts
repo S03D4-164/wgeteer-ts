@@ -1,16 +1,14 @@
-import { BrowserContext, Page, chromium } from 'patchright';
-//import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
+//import { BrowserContext, Page, chromium } from 'patchright';
+import { BrowserContext, Page, chromium } from 'rebrowser-playwright-core';
 //process.env.REBROWSER_PATCHES_DEBUG = '1';
 process.env.REBROWSER_PATCHES_RUNTIME_FIX_MODE = 'addBinding';
 import { protectIt } from './playwright-afp';
-//import { connect } from './playwright-real-browser';
 
 import WebpageModel from '../models/webpage';
 import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 
 import logger from './logger';
-import findProc from 'find-process';
 import { savePayload, saveFullscreenshot, imgResize } from './playwgetSave';
 import { saveRequest, saveResponse } from './playwgetIntercept';
 import mongoose from 'mongoose';
@@ -22,6 +20,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { Xvfb } from './node-xvfb';
 import { spawn } from 'node:child_process';
+import cleanup from './playwgetCleanup';
 
 const dataDir = '/tmp/ppengo';
 
@@ -31,15 +30,9 @@ async function pptrEventSet(
   webpage: any,
 ): Promise<void> {
   /*
-  const browser = browserContext.browser();
-  if (browser) {
-    browser.on('disconnected', () => logger.debug('browser disconnected'));
-  }
-  browserContext.on('close', () => logger.debug('browserContext closed'));
   page.on('request', (request: any) => {
     //logger.debug(`Request: ${request.url()}`);
   });
-  */
   page.on('requestfinished', async (request: any) => {
     const res = await request.response();
     logger.debug(`Finished: ${res.url()}`);
@@ -47,18 +40,23 @@ async function pptrEventSet(
   page.on('requestfailed', (request: any) => {
     logger.debug(`Failed: ${request.failure().errorText} ${request.url()}`);
   });
-  page.on('crash', () => {
-    console.log('Page crashed');
+    */
+  const browser = browserContext.browser();
+  if (browser) {
+    browser.once('disconnected', () => logger.debug('browser disconnected'));
+  }
+  browserContext.once('close', () => logger.debug('browserContext closed'));
+  page.once('crash', async (page: any) => {
+    logger.error(`Page crashed: ${page.url()}`);
   });
-
-  page.once('domcontentloaded', () => {
-    logger.debug('DOM content loaded');
+  page.once('domcontentloaded', async (page: any) => {
+    logger.debug(`DOM content loaded: ${page.url()}`);
   });
-  page.once('close', () => {
-    logger.debug('Page closed');
+  page.once('close', async (page: any) => {
+    logger.debug(`Page closed: ${page.url()}`);
   });
-  page.once('load', () => {
-    logger.debug('Page loaded');
+  page.once('load', async (page: any) => {
+    logger.debug(`Page loaded: ${page.url()}`);
   });
   page.on('dialog', (dialog) => dialog.dismiss());
   // Log all uncaught errors to the terminal
@@ -120,43 +118,6 @@ async function pptrEventSet(
     }
   });
 }
-/*
-async function realPage(
-  webpage: any,
-  chromiumArgs: any,
-): Promise<{
-  page: Page;
-  browserContext: BrowserContext;
-}> {
-  //process.env.CHROME_PATH = executablePath;
-  await fs.promises.mkdir(`${dataDir}/${webpage._id}`, { recursive: true });
-  const { page: connectedPage, browser: connectedBrowser } = await connect({
-    headless: false,
-    args: chromiumArgs,
-    customConfig: {
-      userDataDir: `${dataDir}/${webpage._id}`,
-      executablePath: '/usr/bin/google-chrome-stable',
-    },
-    turnstile: true,
-    connectOption: {
-      defaultViewport: null,
-    },
-  });
-  console.log(chromiumArgs);
-
-  const page = connectedPage as any;
-  const browser = connectedBrowser as any;
-  const browserContext = browser.contexts()[0];
-  try {
-    await pptrEventSet(browserContext, page, webpage);
-    const browserVersion = await browser.version();
-    logger.debug(`${browserVersion}, ${page}`);
-  } catch (err) {
-    console.log(err);
-  }
-  return { page, browserContext };
-}
-*/
 
 async function genPage(
   webpage: any,
@@ -198,58 +159,33 @@ async function genPage(
   return { page: null as any, browserContext: null as any };
 }
 
-//async function playwget(pageId: string): Promise<string | undefined> {
 async function playwget(
   pageId: string | mongoose.Types.ObjectId | undefined,
 ): Promise<string | undefined> {
-  logger.debug(`playwget start: ${pageId}`);
+  logger.debug(`${pageId}: playwget start`);
   let webpage: any;
   try {
     webpage = await WebpageModel.findById(pageId).exec();
-  } catch (e) {
-    logger.error(e);
-    return;
+  } catch (err) {
+    logger.error(`${pageId}: ${err}`);
   }
-  logger.debug(`webpage: ${webpage._id}`);
+  //logger.debug(`webpage: ${webpage._id}`);
 
   if (!webpage) {
-    logger.error(`page ${pageId} not found`);
+    logger.error(`${pageId}: not found`);
     return;
-  }
-
-  try {
-    const list = await findProc('name', 'chrome');
-    if (list) {
-      for (const ps of list) {
-        if (ps.name === 'chrome' && ps.cmd.includes(`/tmp/${webpage._id}`)) {
-          console.log('kill', ps);
-          process.kill(ps.pid);
-        }
-      }
-    }
-  } catch (err) {
-    logger.error(err);
   }
 
   if (webpage.url || webpage.title) {
+    logger.debug(`${pageId}: job has been terminated.`);
     webpage.error = 'job has been terminated.';
     await webpage.save();
     return webpage._id;
   }
 
-  let exHeaders: Record<string, string> = {};
-  if (webpage.option?.lang) {
-    exHeaders['Accept-Language'] = webpage.option.lang;
-  }
-  if (webpage.option?.exHeaders) {
-    for (const line of webpage.option.exHeaders.split('\r\n')) {
-      const match = line.match(/^([^:]+):(.+)$/);
-      if (match && match.length >= 3) {
-        exHeaders[match[1].trim()] = match[2].trim();
-      }
-    }
-  }
   const displayNum = `${Math.floor(Math.random() * (99999 - 99)) + 99}`;
+  await cleanup(webpage._id, displayNum);
+
   const chromiumArgs = [
     '--no-sandbox',
     '--start-maximized',
@@ -268,7 +204,7 @@ async function playwget(
       chromiumArgs.push(`--proxy-server=${webpage.option.proxy}`);
     }
   }
-  logger.debug(webpage.option);
+  //logger.debug(webpage.option);
 
   const xvfb = new Xvfb({
     displayNum,
@@ -301,10 +237,24 @@ async function playwget(
     `${dataDir}/${webpage._id}/displayNum`,
     displayNum,
   );
+
+  let exHeaders: Record<string, string> = {};
+  if (webpage.option?.lang) {
+    exHeaders['Accept-Language'] = webpage.option.lang;
+  }
+  if (webpage.option?.exHeaders) {
+    for (const line of webpage.option.exHeaders.split('\r\n')) {
+      const match = line.match(/^([^:]+):(.+)$/);
+      if (match && match.length >= 3) {
+        exHeaders[match[1].trim()] = match[2].trim();
+      }
+    }
+  }
+
   let { page, browserContext } = await genPage(webpage, chromiumArgs);
-  //let { page, browserContext } = await realPage(webpage, chromiumArgs);
+
   if (!page || !browserContext) {
-    logger.error('Failed to create page or browser context');
+    logger.error(`${pageId}: Failed to create page or browser context`);
     return;
   }
   //const browser = browserContext.browser();
@@ -327,7 +277,7 @@ async function playwget(
   }
 
   const client = await page.context().newCDPSession(page);
-  //await playwgetIntercept(page, webpage, client);
+
   //intercept
   let responseCache: any[] = [];
   let requestArray: any[] = [];
@@ -345,9 +295,9 @@ async function playwget(
   client.on(
     'Fetch.requestPaused',
     async ({ requestId, request, responseStatusCode }: any) => {
-      logger.debug(
+      /*logger.debug(
         `[Intercepted] ${requestId}, ${responseStatusCode}, ${request.url}`,
-      );
+      );*/
 
       let cache: {
         url: string;
@@ -376,9 +326,9 @@ async function playwget(
         }
       } catch (err: any) {
         if (err.message) {
-          logger.debug(
+          /*logger.debug(
             `[Intercepted] ${err.message} ${responseStatusCode} ${request.url}`,
-          );
+          );*/
         }
       }
       responseCache.push(cache);
@@ -388,18 +338,14 @@ async function playwget(
           await client.send('Fetch.continueRequest', {
             requestId,
           });
-        //console.log(`Continuing interception ${interceptionId}`)
       } catch (err: any) {
         logger.debug(err);
       }
     },
   );
   page.on('requestfailed', async function (request: any) {
-    console.log(
-      '[Request] failed: ',
-      request.url().slice(0, 100),
-      request.failure(),
-      //request.failure().errorText,
+    logger.debug(
+      `${pageId}: ${request.failure()} ${request.url().slice(0, 100)}`,
     );
     await docToArray(request);
   });
@@ -486,17 +432,21 @@ async function playwget(
     const delay = webpage.option.delay * 1000;
     await new Promise((done) => setTimeout(done, delay));
     // Turnstile check
-    const solved = await checkTurnstile(page);
-    if (solved) {
-      await new Promise((done) => setTimeout(done, delay));
-    }
+    await checkTurnstile(page);
+
     // execute actions
-    let actions = await yaraSource(await page.content());
+    let actions;
+    let yararule = await yaraSource(await page.content());
+    if (yararule?.actions) {
+      logger.debug(`${webpage._id}: ${yararule}`);
+      actions = yararule.actions;
+      webpage.yara = yararule;
+    }
     if (webpage.option.actions) {
       actions = webpage.option.actions;
     }
-    if (actions && actions.length > 0) {
-      logger.debug(actions);
+    if (actions && actions.length > 1) {
+      webpage.option.actions = actions;
       const lines = actions.split('\r\n');
       let limit = 5;
       let ssarray: any[] = [];
@@ -526,7 +476,7 @@ async function playwget(
         let action = elem[0]?.trim();
         let target = elem[1]?.trim();
         let input = elem[2]?.trim();
-        logger.debug(`action: ${action}, target: ${target}`);
+        logger.debug(`${pageId}: action: ${action}, target: ${target}`);
         if (action == 'click') {
           await page.locator(target).click();
         } else if (action == 'eval') {
@@ -546,16 +496,20 @@ async function playwget(
       }
     }
   } catch (err: any) {
-    logger.error(err);
-    webpage.error = err.message;
+    logger.error(`${pageId}: ${page.isClosed()} ${err}`);
+    if (page.isClosed()) {
+      return;
+    } else {
+      webpage.error = err.message;
+    }
   }
-  logger.debug(`goto completed.`);
+  logger.debug(`${pageId}: goto completed ${webpage.input}`);
 
   try {
     webpage.url = page.url();
-    logger.debug(webpage.url);
+    logger.debug(`${pageId}: ${webpage.url}`);
     webpage.title = await page.title();
-    logger.debug(webpage.title);
+    logger.debug(`${pageId}: ${webpage.title}`);
     webpage.content = await page.content();
     /*
     let screenshot = await page.screenshot({
@@ -611,9 +565,13 @@ async function playwget(
     */
     //explainCode(webpage.content);
   } catch (err: any) {
-    logger.error(err);
-    if (!webpage.error) {
-      webpage.error = err.message;
+    logger.error(`${pageId}: ${page.isClosed()} ${err}`);
+    if (page.isClosed()) {
+      return;
+    } else {
+      if (!webpage.error) {
+        webpage.error = err.message;
+      }
     }
   }
 
@@ -621,7 +579,7 @@ async function playwget(
   if (requests.length == 0) {
     try {
       let start = new Date();
-      logger.debug(`[Request] save: ${requestArray.length}`);
+      logger.debug(`${pageId}: request save ${requestArray.length}`);
       //console.log(requestArray);
       requests = await RequestModel.insertMany(requestArray, {
         ordered: false,
@@ -629,10 +587,10 @@ async function playwget(
       let end = new Date();
       let time = Number(end) - Number(start);
       logger.debug(
-        `[Request] saved: ${requests.length} Execution time: ${time}ms`,
+        `${pageId}: request saved ${requests.length} Execution time: ${time}ms`,
       );
     } catch (err: any) {
-      logger.error(`[Request] ${err}`);
+      logger.error(`${pageId}: ${err}`);
     }
   }
 
@@ -641,7 +599,7 @@ async function playwget(
     if (webpage.option.bulksave) {
       try {
         let start = new Date();
-        logger.debug(`[Response] bulk save: ${responseArray.length}`);
+        logger.debug(`${pageId}: response bulk save ${responseArray.length}`);
         responses = await ResponseModel.insertMany(responseArray, {
           ordered: false,
           //rawResult: true,
@@ -649,29 +607,29 @@ async function playwget(
         let end = new Date();
         let time = Number(end) - Number(start);
         logger.debug(
-          `[Response] bulk saved: ${responses.length} Execution time: ${time}ms`,
+          `${pageId}: response bulk saved ${responses.length} Execution time: ${time}ms`,
         );
       } catch (err: any) {
-        logger.error(`[Response] ${err}`);
+        logger.error(`${pageId}: ${err}`);
       }
     }
   }
   if (responses.length == 0) {
     let start = new Date();
-    logger.debug(`[Response] save: ${responseArray.length}`);
+    logger.debug(`${pageId}: response save ${responseArray.length}`);
     for (let res of responseArray) {
       try {
         const newRes = new ResponseModel(res);
         await newRes.save();
         responses.push(newRes);
       } catch (err) {
-        logger.error(`[Response] ${err}`);
+        logger.error(`${pageId}: response save ${err}`);
       }
     }
     let end = new Date();
     let time = Number(end) - Number(start);
     logger.debug(
-      `[Response] saved: ${responses.length} Execution time: ${time}ms`,
+      `${pageId}: response saved ${responses.length} Execution time: ${time}ms`,
     );
   }
 
@@ -690,11 +648,12 @@ async function playwget(
     await browser?.close();
     await new Promise((done) => setTimeout(done, 1000));
     xvfb.stopSync();
-    logger.debug(`webpage saved: ${webpage._id}`);
+    logger.debug(`${pageId}: webpage saved`);
+    return webpage._id;
   } catch (err) {
-    logger.error(err);
+    logger.error(`${pageId}: ${err}`);
+    return undefined;
   }
-  return webpage._id;
 }
 
 export default playwget;

@@ -61,16 +61,14 @@ const yaraScan = async (source: string): Promise<YaraScanResult | null> => {
   });
 };
 
-export const yaraSource = async (
-  html: string,
-): Promise<string | null | undefined> => {
+export const yaraSource = async (html: string): Promise<any> => {
   const yaraResult = await yaraScan(html);
   if (yaraResult?.rules.length) {
     const name = yaraResult.rules[0].id;
     const rule = await YaraModel.findOne({ name });
     if (rule) {
       //logger.debug(rule.actions);
-      return rule.actions;
+      return rule;
     }
   }
   return undefined;

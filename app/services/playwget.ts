@@ -6,18 +6,18 @@ import { Agenda } from 'agenda';
 
 export default async (agenda: Agenda) => {
   agenda.define('playwget', async (job: any, done) => {
-    logger.info(job.attrs.data);
     const data = job.attrs.data;
-    if (data.count > 0) {
-      logger.error(`playwget failed: ${data.pageId}`);
-      done();
-    } else {
+    while (job.attrs.data.count < 2) {
       job.attrs.data.count += 1;
       job.save();
+      logger.info(job.attrs.data);
+      const result = await playwget(data.pageId);
+      if (result) {
+        await harparse(data.pageId);
+        agenda.now('analyzePage', { pageId: data.pageId });
+        break;
+      }
     }
-    await playwget(data.pageId);
-    await harparse(data.pageId);
-    agenda.now('analyzePage', { pageId: data.pageId });
     done();
   });
 };
