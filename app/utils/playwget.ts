@@ -6,9 +6,13 @@ import { protectIt } from './playwright-afp';
 //import { connect } from './playwright-real-browser';
 
 import WebpageModel from '../models/webpage';
+import RequestModel from '../models/request';
+import ResponseModel from '../models/response';
+
 import logger from './logger';
 import findProc from 'find-process';
 import { savePayload, saveFullscreenshot, imgResize } from './playwgetSave';
+import { saveRequest, saveResponse } from './playwgetIntercept';
 import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
 import { yaraSource } from './yara';
@@ -322,7 +326,130 @@ async function playwget(
     waitUntilOption = 'domcontentloaded';
   }
 
-  //const client = await page.context().newCDPSession(page);
+  const client = await page.context().newCDPSession(page);
+  //await playwgetIntercept(page, webpage, client);
+  //intercept
+  let responseCache: any[] = [];
+  let requestArray: any[] = [];
+  let responseArray: any[] = [];
+
+  //await client.send('Network.enable');
+  await client.send('Fetch.enable', {
+    patterns: [
+      {
+        urlPattern: '*',
+        requestStage: 'Response',
+      },
+    ],
+  });
+  client.on(
+    'Fetch.requestPaused',
+    async ({ requestId, request, responseStatusCode }: any) => {
+      logger.debug(
+        `[Intercepted] ${requestId}, ${responseStatusCode}, ${request.url}`,
+      );
+
+      let cache: {
+        url: string;
+        status: number;
+        body: string | Buffer | null;
+        interceptionId: string;
+      } = {
+        url: request.url,
+        status: responseStatusCode || 0,
+        body: null,
+        interceptionId: requestId,
+      };
+      try {
+        if (requestId) {
+          let response = await client.send('Fetch.getResponseBody', {
+            requestId,
+          });
+          let newBody = (response as { body: string; base64Encoded: boolean })
+            .base64Encoded
+            ? Buffer.from(
+                (response as { body: string; base64Encoded: boolean }).body,
+                'base64',
+              )
+            : (response as { body: string; base64Encoded: boolean }).body;
+          cache.body = newBody;
+        }
+      } catch (err: any) {
+        if (err.message) {
+          logger.debug(
+            `[Intercepted] ${err.message} ${responseStatusCode} ${request.url}`,
+          );
+        }
+      }
+      responseCache.push(cache);
+
+      try {
+        if (client)
+          await client.send('Fetch.continueRequest', {
+            requestId,
+          });
+        //console.log(`Continuing interception ${interceptionId}`)
+      } catch (err: any) {
+        logger.debug(err);
+      }
+    },
+  );
+  page.on('requestfailed', async function (request: any) {
+    console.log(
+      '[Request] failed: ',
+      request.url().slice(0, 100),
+      request.failure(),
+      //request.failure().errorText,
+    );
+    await docToArray(request);
+  });
+
+  page.on('requestfinished', async function (request: any) {
+    await docToArray(request);
+  });
+
+  async function docToArray(request: any): Promise<void> {
+    try {
+      /*
+      logger.debug(
+        `[Request] finished: ${request.method()} ${request.url().slice(0, 100)}`,
+      );
+      */
+      let req: any = await saveRequest(request, webpage._id);
+      //console.log(req);
+      const response = await request.response();
+      let res;
+      if (response) {
+        /*
+        logger.debug(
+          `[Request] response: ${response.status()} ${response.url().slice(0, 100)}`,
+        );
+        */
+        res = await saveResponse(response, webpage._id, responseCache);
+        if (res && responseArray != null) {
+          responseArray.push(res);
+        }
+        req.interceptionId = res?.interceptionId;
+      }
+      if (req && requestArray != null) {
+        requestArray.push(req);
+      }
+      /*
+      if (requestArray != null && requestArray != null) {
+        console.log(
+          req.interceptionId,
+          res?.interceptionId,
+          requestArray.length,
+          responseArray.length,
+          request.method(),
+          request.url().slice(0, 100),
+        );
+      }
+      */
+    } catch (error: any) {
+      logger.error(error);
+    }
+  }
   /*
   await client.send('Network.enable');
 
@@ -488,6 +615,64 @@ async function playwget(
     if (!webpage.error) {
       webpage.error = err.message;
     }
+  }
+
+  let requests = (await RequestModel.find({ webpage })) || [];
+  if (requests.length == 0) {
+    try {
+      let start = new Date();
+      logger.debug(`[Request] save: ${requestArray.length}`);
+      //console.log(requestArray);
+      requests = await RequestModel.insertMany(requestArray, {
+        ordered: false,
+      });
+      let end = new Date();
+      let time = Number(end) - Number(start);
+      logger.debug(
+        `[Request] saved: ${requests.length} Execution time: ${time}ms`,
+      );
+    } catch (err: any) {
+      logger.error(`[Request] ${err}`);
+    }
+  }
+
+  let responses = (await ResponseModel.find({ webpage })) || [];
+  if (responses.length == 0) {
+    if (webpage.option.bulksave) {
+      try {
+        let start = new Date();
+        logger.debug(`[Response] bulk save: ${responseArray.length}`);
+        responses = await ResponseModel.insertMany(responseArray, {
+          ordered: false,
+          //rawResult: true,
+        });
+        let end = new Date();
+        let time = Number(end) - Number(start);
+        logger.debug(
+          `[Response] bulk saved: ${responses.length} Execution time: ${time}ms`,
+        );
+      } catch (err: any) {
+        logger.error(`[Response] ${err}`);
+      }
+    }
+  }
+  if (responses.length == 0) {
+    let start = new Date();
+    logger.debug(`[Response] save: ${responseArray.length}`);
+    for (let res of responseArray) {
+      try {
+        const newRes = new ResponseModel(res);
+        await newRes.save();
+        responses.push(newRes);
+      } catch (err) {
+        logger.error(`[Response] ${err}`);
+      }
+    }
+    let end = new Date();
+    let time = Number(end) - Number(start);
+    logger.debug(
+      `[Response] saved: ${responses.length} Execution time: ${time}ms`,
+    );
   }
 
   try {
