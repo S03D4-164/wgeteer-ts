@@ -23,8 +23,7 @@ import { analyzePage, analyzeResponses } from './wappalyzer';
 import { getHostInfo, setResponseIps } from './ipInfo';
 import logger from './logger';
 import { db, closeDB } from './database';
-import { saveRequest, saveResponse } from './wgeteerSave';
-import { saveFullscreenshot } from './screenshot';
+import { saveRequest, saveResponse, saveFullscreenshot } from './wgeteerSave';
 
 import findProc from 'find-process';
 import Jimp from 'jimp';
