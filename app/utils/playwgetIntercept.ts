@@ -50,11 +50,11 @@ async function saveResponse(
       }
     }
 
-    if (!responseBuffer && responseStatus >= 200 && responseStatus < 300) {
+    if (!responseBuffer && responseStatus >= 200) {
       responseBuffer = await interceptedResponse.body();
     }
   } catch (err: any) {
-    logger.error(`[Response] failed on save buffer ${err}`);
+    //logger.error(`[${pageId}] ${err} ${interceptedResponse.url()}`);
   }
 
   if (responseBuffer) {
@@ -62,11 +62,11 @@ async function saveResponse(
   }
 
   try {
-    if (!text && responseStatus >= 200 && responseStatus < 300) {
+    if (!text && responseStatus >= 200) {
       text = await interceptedResponse.text();
     }
   } catch (err: any) {
-    logger.error(`[Response] failed on save text ${err}`);
+    //logger.error(`[${pageId}] ${err} ${interceptedResponse.url()}`);
   }
 
   let securityDetails: any = {};
@@ -81,8 +81,8 @@ async function saveResponse(
         validTo: secDetails.validTo,
       };
     }
-  } catch (error: any) {
-    logger.debug(error);
+  } catch (err: any) {
+    logger.debug(`[${pageId}] ${err}`);
   }
 
   const serverAddr = await interceptedResponse.serverAddr();
@@ -129,8 +129,8 @@ async function saveResponse(
       }
     }
     return response;
-  } catch (error: any) {
-    logger.error(error);
+  } catch (err: any) {
+    logger.error(`[${pageId}]  ${err}`);
     return undefined;
   }
 }
@@ -139,18 +139,6 @@ async function saveRequest(
   interceptedRequest: any,
   pageId: string,
 ): Promise<any> {
-  let redirectChain: string[] = [];
-  try {
-    const chain: any[] = interceptedRequest.redirectChain();
-    if (chain) {
-      for (const seq of chain) {
-        redirectChain.push(seq.url());
-      }
-    }
-  } catch (error: any) {
-    //logger.error(error);
-  }
-
   const headers: any = interceptedRequest.headers();
   const newHeaders: any = {};
   for (const key of Object.keys(headers)) {
@@ -170,11 +158,10 @@ async function saveRequest(
       postData: interceptedRequest.postData(),
       headers: newHeaders,
       failure: interceptedRequest.failure(),
-      redirectChain,
     };
     return request;
   } catch (err: any) {
-    logger.error(err);
+    logger.error(`[${pageId}] ${err}`);
     return undefined;
   }
 }
