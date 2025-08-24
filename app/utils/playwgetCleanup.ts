@@ -2,15 +2,20 @@ import fs from 'fs';
 import findProc from 'find-process';
 import logger from './logger';
 
-async function cleanup(pageId: string, displayNum: string) {
-  const dataDir = '/tmp/ppengo';
+async function cleanup(pageId: string, displayNum: string | undefined) {
+  const dataDir = `/tmp/ppengo/${pageId}`;
+  if (!displayNum) {
+    if (fs.existsSync(`${dataDir}/displayNum`)) {
+      displayNum = fs.readFileSync(`${dataDir}/displayNum`, 'utf-8');
+    }
+  }
   try {
     //chrome
     const chromePs = await findProc('name', 'chrome');
     if (chromePs) {
       for (const ps of chromePs) {
         //console.log(ps);
-        if (ps.name === 'chrome' && ps.cmd.includes(`${dataDir}/${pageId}`)) {
+        if (ps.name === 'chrome' && ps.cmd.includes(`${dataDir}`)) {
           logger.debug(`${pageId}: kill ${ps}`);
           process.kill(ps.pid);
         }
@@ -38,7 +43,7 @@ async function cleanup(pageId: string, displayNum: string) {
         }
       }
     }
-    fs.rmSync(`${dataDir}/${pageId}`, { recursive: true, force: true });
+    fs.rmSync(dataDir, { recursive: true, force: true });
   } catch (err) {
     logger.error(`${pageId}: ${err}`);
   }
