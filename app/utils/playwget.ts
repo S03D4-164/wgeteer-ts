@@ -9,11 +9,17 @@ import RequestModel from '../models/request';
 import ResponseModel from '../models/response';
 
 import logger from './logger';
-import { savePayload, saveFullscreenshot, imgResize } from './playwgetSave';
+import { savePayload } from './playwgetSave';
 import { saveRequest, saveResponse } from './playwgetIntercept';
+import {
+  cdpScreenshot,
+  imgResize,
+  saveFullscreenshot,
+} from './playwgetScreenshot';
+
 import mongoose from 'mongoose';
 import checkTurnstile from './turnstile';
-import { yaraSource } from './yara';
+
 import explainCode from './gemini';
 //import flexDoc from './flexsearch';
 import fs from 'fs';
@@ -21,6 +27,7 @@ import { execSync } from 'child_process';
 import { Xvfb } from './node-xvfb';
 import { spawn } from 'node:child_process';
 import cleanup from './playwgetCleanup';
+import { playwgetAction } from './playwgetAction';
 
 const dataDir = '/tmp/ppengo';
 
@@ -29,6 +36,7 @@ async function pptrEventSet(
   page: Page,
   webpage: any,
 ): Promise<void> {
+  const pageId = webpage._id;
   /*
   page.on('request', (request: any) => {
     //logger.debug(`Request: ${request.url()}`);
@@ -43,25 +51,29 @@ async function pptrEventSet(
     */
   const browser = browserContext.browser();
   if (browser) {
-    browser.once('disconnected', () => logger.debug('browser disconnected'));
+    browser.once('disconnected', () =>
+      logger.debug(`[${pageId}] browser disconnected`),
+    );
   }
-  browserContext.once('close', () => logger.debug('browserContext closed'));
+  browserContext.once('close', () =>
+    logger.debug(`[${pageId}] browserContext closed`),
+  );
   page.once('crash', async (page: any) => {
-    logger.error(`Page crashed: ${page.url()}`);
+    logger.error(`[${pageId}] Page crashed: ${page.url()}`);
   });
   page.once('domcontentloaded', async (page: any) => {
-    logger.debug(`DOM content loaded: ${page.url()}`);
+    logger.debug(`[${pageId}] DOM content loaded: ${page.url()}`);
   });
   page.once('close', async (page: any) => {
-    logger.debug(`Page closed: ${page.url()}`);
+    logger.debug(`[${pageId}] Page closed: ${page.url()}`);
   });
   page.once('load', async (page: any) => {
-    logger.debug(`Page loaded: ${page.url()}`);
+    logger.debug(`[${pageId}] Page loaded: ${page.url()}`);
   });
   page.on('dialog', (dialog) => dialog.dismiss());
   // Log all uncaught errors to the terminal
   page.on('pageerror', (exception) => {
-    logger.error(`Uncaught exception: "${exception}"`);
+    logger.error(`[${pageId}] Uncaught exception: "${exception}"`);
   });
   // download pdf
   if (webpage.option.pdf) {
@@ -126,20 +138,48 @@ async function genPage(
   page: Page;
   browserContext: BrowserContext;
 }> {
-  const userDataDir = `${dataDir}/${webpage._id}`;
-  logger.debug(`${userDataDir}`);
+  const pageId = webpage._id;
+  const userDataDir = `${dataDir}/${pageId}`;
+  //logger.debug(`${userDataDir}`);
+  let options: any = {
+    executablePath: process.env.CHROME_EXECUTABLE_PATH,
+    //executablePath: '/usr/bin/google-chrome-stable',
+    channel: 'chrome',
+    headless: false,
+    viewport: null,
+    recordHar: { path: `${userDataDir}/pw.har` },
+    ignoreHTTPSErrors: true,
+    args: chromiumArgs,
+    ignoreDefaultArgs: ['--enable-automation'], // hide infobar
+    javaScriptEnabled: true,
+    timezoneId: 'Asia/Tokyo',
+  };
+  let exHeaders: Record<string, string> = {};
+  if (webpage.option?.lang) {
+    exHeaders['Accept-Language'] = webpage.option.lang;
+  }
+  if (webpage.option?.userAgent && webpage.option.userAgent.length > 1) {
+    options.userAgent = webpage.option.userAgent;
+  }
+  if (webpage.option?.disableScript) {
+    options.javaScriptEnabled = false;
+  }
+  if (webpage.option?.exHeaders) {
+    for (const line of webpage.option.exHeaders.split('\r\n')) {
+      const match = line.match(/^([^:]+):(.+)$/);
+      if (match && match.length >= 3) {
+        exHeaders[match[1].trim()] = match[2].trim();
+      }
+    }
+  }
+  if (exHeaders) {
+    options.extraHTTPHeaders = exHeaders;
+  }
   try {
-    const browserContext = await chromium.launchPersistentContext(userDataDir, {
-      executablePath: process.env.CHROME_EXECUTABLE_PATH,
-      //executablePath: '/usr/bin/google-chrome-stable',
-      channel: 'chrome',
-      headless: false,
-      viewport: null,
-      recordHar: { path: `${userDataDir}/pw.har` },
-      ignoreHTTPSErrors: true,
-      args: chromiumArgs,
-      ignoreDefaultArgs: ['--enable-automation'], // hide infobar
-    });
+    const browserContext = await chromium.launchPersistentContext(
+      userDataDir,
+      options,
+    );
     const permissions = ['notifications'];
     await browserContext.grantPermissions(permissions);
     //browserContext.setDefaultTimeout(30000);
@@ -154,37 +194,35 @@ async function genPage(
       browserContext: browserContext as BrowserContext,
     };
   } catch (err) {
-    logger.error(err);
+    logger.error(`[${pageId}] ${err}`);
   }
   return { page: null as any, browserContext: null as any };
 }
 
-async function playwget(
-  pageId: string | mongoose.Types.ObjectId | undefined,
-): Promise<string | undefined> {
-  logger.debug(`${pageId}: playwget start`);
+async function playwget(pageId: string): Promise<string | undefined> {
+  logger.debug(`[${pageId}] playwget start`);
   let webpage: any;
   try {
     webpage = await WebpageModel.findById(pageId).exec();
   } catch (err) {
-    logger.error(`${pageId}: ${err}`);
+    logger.error(`[${pageId}] ${err}`);
   }
   //logger.debug(`webpage: ${webpage._id}`);
 
   if (!webpage) {
-    logger.error(`${pageId}: not found`);
+    logger.error(`[${pageId}] not found`);
     return;
   }
 
   if (webpage.url || webpage.title) {
-    logger.debug(`${pageId}: job has been terminated.`);
+    logger.debug(`[${pageId}] job has been terminated.`);
     webpage.error = 'job has been terminated.';
     await webpage.save();
-    return webpage._id;
+    return pageId;
   }
 
   const displayNum = `${Math.floor(Math.random() * (99999 - 99)) + 99}`;
-  await cleanup(webpage._id, displayNum);
+  await cleanup(pageId, undefined);
 
   const chromiumArgs = [
     '--no-sandbox',
@@ -238,37 +276,14 @@ async function playwget(
     displayNum,
   );
 
-  let exHeaders: Record<string, string> = {};
-  if (webpage.option?.lang) {
-    exHeaders['Accept-Language'] = webpage.option.lang;
-  }
-  if (webpage.option?.exHeaders) {
-    for (const line of webpage.option.exHeaders.split('\r\n')) {
-      const match = line.match(/^([^:]+):(.+)$/);
-      if (match && match.length >= 3) {
-        exHeaders[match[1].trim()] = match[2].trim();
-      }
-    }
-  }
-
   let { page, browserContext } = await genPage(webpage, chromiumArgs);
 
   if (!page || !browserContext) {
-    logger.error(`${pageId}: Failed to create page or browser context`);
+    logger.error(`[${pageId}] Failed to create page or browser context`);
     return;
   }
   //const browser = browserContext.browser();
-  if (webpage.option?.userAgent && webpage.option.userAgent.length > 1) {
-    //await page.setUserAgent(webpage.option.userAgent);
-  }
-  if (webpage.option?.disableScript) {
-    //await page.setJavaScriptEnabled(false);
-  } else {
-    //await page.setJavaScriptEnabled(true);
-  }
-  if (exHeaders) {
-    await page.setExtraHTTPHeaders(exHeaders);
-  }
+
   await page.setViewportSize({ width: 1280, height: 700 });
   let waitUntilOption: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' =
     'load';
@@ -344,9 +359,6 @@ async function playwget(
     },
   );
   page.on('requestfailed', async function (request: any) {
-    logger.debug(
-      `${pageId}: ${request.failure()} ${request.url().slice(0, 100)}`,
-    );
     await docToArray(request);
   });
 
@@ -361,7 +373,7 @@ async function playwget(
         `[Request] finished: ${request.method()} ${request.url().slice(0, 100)}`,
       );
       */
-      let req: any = await saveRequest(request, webpage._id);
+      let req: any = await saveRequest(request, pageId);
       //console.log(req);
       const response = await request.response();
       let res;
@@ -371,7 +383,7 @@ async function playwget(
           `[Request] response: ${response.status()} ${response.url().slice(0, 100)}`,
         );
         */
-        res = await saveResponse(response, webpage._id, responseCache);
+        res = await saveResponse(response, pageId, responseCache);
         if (res && responseArray != null) {
           responseArray.push(res);
         }
@@ -380,18 +392,6 @@ async function playwget(
       if (req && requestArray != null) {
         requestArray.push(req);
       }
-      /*
-      if (requestArray != null && requestArray != null) {
-        console.log(
-          req.interceptionId,
-          res?.interceptionId,
-          requestArray.length,
-          responseArray.length,
-          request.method(),
-          request.url().slice(0, 100),
-        );
-      }
-      */
     } catch (error: any) {
       logger.error(error);
     }
@@ -434,109 +434,43 @@ async function playwget(
     // Turnstile check
     await checkTurnstile(page);
 
-    // execute actions
-    let actions;
-    let yararule = await yaraSource(await page.content());
-    if (yararule?.actions) {
-      logger.debug(`${webpage._id}: ${yararule}`);
-      actions = yararule.actions;
-      webpage.yara = yararule;
-    }
-    if (webpage.option.actions) {
-      actions = webpage.option.actions;
-    }
-    if (actions && actions.length > 1) {
-      webpage.option.actions = actions;
-      const lines = actions.split('\r\n');
-      let limit = 5;
-      let ssarray: any[] = [];
-      for (let line of lines) {
-        // screenshot before action
-        let ssobj: any = {};
-        let screenshot = await page.screenshot({
-          fullPage: false,
-          timeout: delay,
-        });
-        const resizedImg = await imgResize(screenshot);
-        if (resizedImg) {
-          ssobj.thumbnail = resizedImg.toString('base64');
-        }
-        let fullscreenshot = await page.screenshot({
-          fullPage: true,
-          timeout: delay,
-        });
-        let fss = await saveFullscreenshot(fullscreenshot);
-        if (fss) {
-          ssobj.full = new mongoose.Types.ObjectId(fss);
-        }
-        //console.log(ssobj);
-        ssarray.push(ssobj);
-        // actions
-        let elem = line.split('>');
-        let action = elem[0]?.trim();
-        let target = elem[1]?.trim();
-        let input = elem[2]?.trim();
-        logger.debug(`${pageId}: action: ${action}, target: ${target}`);
-        if (action == 'click') {
-          await page.locator(target).click();
-        } else if (action == 'eval') {
-          await page.evaluate(target);
-        } else if (action == 'fill') {
-          await page.locator(target).pressSequentially(input);
-        } else if (action == 'press') {
-          await page.locator(target).press(input);
-        }
-        await new Promise((done) => setTimeout(done, delay));
-        limit--;
-        if (limit <= 0) break;
-      }
-      //console.log(ssarray);
-      if (ssarray.length > 0) {
-        webpage.screenshots = ssarray;
-      }
-    }
+    const { root } = await client.send('DOM.getDocument');
+    const { nodeId } = await client.send('DOM.querySelector', {
+      nodeId: root.nodeId,
+      selector: 'html',
+    });
+    await client.send('CSS.enable');
+    const { fonts } = await client.send('CSS.getPlatformFontsForNode', {
+      nodeId: nodeId,
+    });
+    console.log(fonts);
+
+    await playwgetAction(page, webpage, client);
   } catch (err: any) {
-    logger.error(`${pageId}: ${page.isClosed()} ${err}`);
+    logger.error(`[${pageId}] ${page.isClosed()} ${err}`);
     if (page.isClosed()) {
       return;
     } else {
       webpage.error = err.message;
     }
   }
-  logger.debug(`${pageId}: goto completed ${webpage.input}`);
+  logger.debug(`[${pageId}] goto completed ${webpage.input}`);
 
   try {
     webpage.url = page.url();
-    logger.debug(`${pageId}: ${webpage.url}`);
+    logger.debug(`[${pageId}] ${webpage.url}`);
     webpage.title = await page.title();
-    logger.debug(`${pageId}: ${webpage.title}`);
+    logger.debug(`[${pageId}] ${webpage.title}`);
     webpage.content = await page.content();
-    /*
-    let screenshot = await page.screenshot({
-      fullPage: false,
-      timeout: webpage.option.delay * 10000,
-      animations: 'disabled',
-    });*/
-    const client = await page.context().newCDPSession(page);
-    const base64ss = (
-      await client.send('Page.captureScreenshot', {
-        captureBeyondViewport: true,
-        optimizeForSpeed: true,
-      })
-    ).data;
-    let screenshot = Buffer.from(base64ss, 'base64');
+
+    const screenshot = await cdpScreenshot(client);
     const resizedImg = await imgResize(screenshot);
     webpage.thumbnail = resizedImg.toString('base64');
-    /*let fullscreenshot = await page.screenshot({
-      fullPage: true,
-      timeout: webpage.option.delay * 10000,
-    });*/
-    let fullscreenshot = screenshot;
-    let fss = await saveFullscreenshot(fullscreenshot);
+    let fss = await saveFullscreenshot(screenshot);
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
-    const pngPath = `${dataDir}/${webpage._id}/screenshot.png`;
+    const pngPath = `${dataDir}/${pageId}/screenshot.png`;
     const xwd = execSync(
       `xwd -display :${displayNum} -root -silent | convert xwd:- png:${pngPath}`,
     );
@@ -565,7 +499,7 @@ async function playwget(
     */
     //explainCode(webpage.content);
   } catch (err: any) {
-    logger.error(`${pageId}: ${page.isClosed()} ${err}`);
+    logger.error(`[${pageId}] ${page.isClosed()} ${err}`);
     if (page.isClosed()) {
       return;
     } else {
@@ -579,7 +513,7 @@ async function playwget(
   if (requests.length == 0) {
     try {
       let start = new Date();
-      logger.debug(`${pageId}: request save ${requestArray.length}`);
+      logger.debug(`[${pageId}] request save: ${requestArray.length}`);
       //console.log(requestArray);
       requests = await RequestModel.insertMany(requestArray, {
         ordered: false,
@@ -587,10 +521,10 @@ async function playwget(
       let end = new Date();
       let time = Number(end) - Number(start);
       logger.debug(
-        `${pageId}: request saved ${requests.length} Execution time: ${time}ms`,
+        `[${pageId}] request saved: ${requests.length} Execution time: ${time}ms`,
       );
     } catch (err: any) {
-      logger.error(`${pageId}: ${err}`);
+      logger.error(`[${pageId}] ${err}`);
     }
   }
 
@@ -599,7 +533,7 @@ async function playwget(
     if (webpage.option.bulksave) {
       try {
         let start = new Date();
-        logger.debug(`${pageId}: response bulk save ${responseArray.length}`);
+        logger.debug(`[${pageId}] response bulk save: ${responseArray.length}`);
         responses = await ResponseModel.insertMany(responseArray, {
           ordered: false,
           //rawResult: true,
@@ -607,29 +541,29 @@ async function playwget(
         let end = new Date();
         let time = Number(end) - Number(start);
         logger.debug(
-          `${pageId}: response bulk saved ${responses.length} Execution time: ${time}ms`,
+          `[${pageId}] response bulk saved: ${responses.length} Execution time: ${time}ms`,
         );
       } catch (err: any) {
-        logger.error(`${pageId}: ${err}`);
+        logger.error(`[${pageId}] ${err}`);
       }
     }
   }
   if (responses.length == 0) {
     let start = new Date();
-    logger.debug(`${pageId}: response save ${responseArray.length}`);
+    logger.debug(`[${pageId}] response save: ${responseArray.length}`);
     for (let res of responseArray) {
       try {
         const newRes = new ResponseModel(res);
         await newRes.save();
         responses.push(newRes);
       } catch (err) {
-        logger.error(`${pageId}: response save ${err}`);
+        logger.error(`[${pageId}] response save ${err}`);
       }
     }
     let end = new Date();
     let time = Number(end) - Number(start);
     logger.debug(
-      `${pageId}: response saved ${responses.length} Execution time: ${time}ms`,
+      `[${pageId}] response saved: ${responses.length} Execution time: ${time}ms`,
     );
   }
 
@@ -648,10 +582,10 @@ async function playwget(
     await browser?.close();
     await new Promise((done) => setTimeout(done, 1000));
     xvfb.stopSync();
-    logger.debug(`${pageId}: webpage saved`);
-    return webpage._id;
+    logger.debug(`[${pageId}] webpage saved`);
+    return pageId;
   } catch (err) {
-    logger.error(`${pageId}: ${err}`);
+    logger.error(`[${pageId}] ${err}`);
     return undefined;
   }
 }
