@@ -16,7 +16,7 @@ async function playwgetAction(page: any, webpage: any, client: any) {
   if (yararule?.actions) {
     logger.debug(`[${pageId}] ${yararule}`);
     actions = yararule.actions;
-    webpage.yara = yararule;
+    //webpage.yara = yararule;
   }
   if (webpage.option.actions) {
     actions = webpage.option.actions;

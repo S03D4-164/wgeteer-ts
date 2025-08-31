@@ -10,6 +10,27 @@ import vtPayload from './services/vtPayload';
 import gsblookup from './services/gsblookup';
 import gsblookupUrl from './services/gsblookupUrl';
 
+import { Worker, Job } from 'bullmq';
+import pw from './utils/playwget';
+import harparse from './utils/playwgetSave';
+
+const worker = new Worker(
+  'ppengo',
+  async (job: Job) => {
+    //console.log(job);
+    if (job.name === 'playwget') {
+      await pw(job.data.pageId);
+      await harparse(job.data.pageId);
+    }
+  },
+  {
+    connection: {
+      host: 'localhost',
+      port: 6379,
+    },
+  },
+);
+
 const mongoConnectionString = 'mongodb://127.0.0.1:27017/wgeteer';
 
 mongoose

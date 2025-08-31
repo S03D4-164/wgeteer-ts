@@ -32,6 +32,7 @@
     "agenda": "^5.0.0",
     "archiver": "^6.0.2",
     "archiver-zip-encrypted": "^2.0.0",
+    "bullmq": "^5.58.4",
     "chrome-launcher": "^1.2.0",
     "csv-parser": "^3.2.0",
     "es7": "npm:@elastic/elasticsearch@^7.17.14",
