@@ -1,0 +1,6 @@
+ignoredBuiltDependencies:
+  - msgpackr-extract
+  - sleep
+
+onlyBuiltDependencies:
+  - '@automattic/yara'

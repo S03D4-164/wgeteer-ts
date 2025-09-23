@@ -8,8 +8,7 @@ services:
       - GSBKEY
       - GEMINI_API_KEY
       - PPENGO
-      - X11VNC_PASSWORD="password"
-      #- DISPLAY=:99
+      #- X11VNC_PASSWORD="password"
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
       - CHROME_EXECUTABLE_PATH=/home/node/app/chrome/linux-123.0.6312.122/chrome-linux64/chrome
       #- CHROME_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
