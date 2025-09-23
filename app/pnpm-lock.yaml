@@ -53,6 +53,9 @@ importers:
       flexsearch:
         specifier: ^0.8.205
         version: 0.8.212
+      ghost-cursor:
+        specifier: ^1.4.1
+        version: 1.4.1
       ip2location-nodejs:
         specifier: ^8.3.0
         version: 8.5.0
@@ -95,6 +98,9 @@ importers:
       superagent:
         specifier: ^10.2.0
         version: 10.2.3
+      tree-kill:
+        specifier: ^1.2.2
+        version: 1.2.2
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@22.18.6)(typescript@5.9.2)
