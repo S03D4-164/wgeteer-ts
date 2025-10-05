@@ -35,7 +35,7 @@ async function playwgetAction(page: any, webpage: any, client: any) {
         ssobj.thumbnail = resizedImg.toString('base64');
       }
       //let fullscreenshot = screenshot;
-      let fss = await saveFullscreenshot(screenshot);
+      let fss = await saveFullscreenshot(screenshot, []);
       if (fss) {
         ssobj.full = new mongoose.Types.ObjectId(fss);
       }

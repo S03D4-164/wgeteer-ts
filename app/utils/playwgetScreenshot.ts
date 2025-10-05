@@ -13,14 +13,17 @@ async function imgResize(buffer: Buffer): Promise<Buffer> {
   return image.getBufferAsync(Jimp.MIME_PNG);
 }
 
-async function saveFullscreenshot(buff: Buffer): Promise<string | undefined> {
+async function saveFullscreenshot(
+  buff: Buffer,
+  tag: Array<Record<string, unknown>>,
+): Promise<string | undefined> {
   try {
     const md5Hash = crypto.createHash('md5').update(buff).digest('hex');
     const fullscreenshot = buff.toString('base64');
 
     let ss: any = await ScreenshotModel.findOneAndUpdate(
       { md5: md5Hash },
-      { screenshot: fullscreenshot },
+      { screenshot: fullscreenshot, tag },
       { new: true, upsert: true, strict: true },
     ).exec();
 

@@ -466,7 +466,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     const screenshot = await cdpScreenshot(client);
     const resizedImg = await imgResize(screenshot);
     webpage.thumbnail = resizedImg.toString('base64');
-    let fss = await saveFullscreenshot(screenshot);
+    let fss = await saveFullscreenshot(screenshot, []);
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
@@ -481,7 +481,12 @@ async function playwget(pageId: string): Promise<string | undefined> {
       if (resizedImg) {
         ssobj.thumbnail = resizedImg.toString('base64');
       }
-      let fss = await saveFullscreenshot(pngData);
+      let tag = [
+        {
+          url: webpage.url,
+        },
+      ];
+      let fss = await saveFullscreenshot(pngData, tag);
       if (fss) {
         ssobj.full = new mongoose.Types.ObjectId(fss);
       }
