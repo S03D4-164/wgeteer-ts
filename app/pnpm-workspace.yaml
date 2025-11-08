@@ -4,3 +4,4 @@ ignoredBuiltDependencies:
 
 onlyBuiltDependencies:
   - '@automattic/yara'
+  - better-sqlite3
