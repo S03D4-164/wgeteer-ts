@@ -11,6 +11,11 @@ mkdir -p /home/node/.fluxbox && cat fluxbox_init > /home/node/.fluxbox/init
 
 #x11vnc -display :99.0 -no6 -noipv6 -shared -forever -v -o /tmp/x11vnc.log &
 
+if [ ! -d "/home/node/.cache/camoufox/" ];then
+  echo "installing camoufox"
+  pnpx camoufox-js fetch
+fi
+
 echo "starting node server"
 pnpm install --loglevel verbose
 if [ ! -d "/home/node/app/chrome/linux-123.0.6312.122" ];then

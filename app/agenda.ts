@@ -3,6 +3,7 @@ import logger from './utils/logger';
 import Agenda from 'agenda';
 import helloWorld from './services/helloWorld';
 import wgeteer from './services/wgeteer';
+import camoufox from './services/camoufox';
 import playwget from './services/playwget';
 import psChrome from './services/psChrome';
 import killChrome from './services/killChrome';
@@ -66,6 +67,7 @@ const agenda = new Agenda({
 agenda.on('ready', async function () {
   await helloWorld(agenda);
   await wgeteer(agenda);
+  await camoufox(agenda);
   await playwget(agenda);
   await psChrome(agenda);
   await killChrome(agenda);
@@ -74,7 +76,7 @@ agenda.on('ready', async function () {
   await gsblookupUrl(agenda);
 
   const canceled = await agenda.cancel({
-    name: ['wgeteer', 'playwget'],
+    name: ['wgeteer', 'playwget', 'camoufox'],
   });
   logger.debug(`canceled: ${canceled}`);
   await agenda.now('hello world', { time: new Date() });

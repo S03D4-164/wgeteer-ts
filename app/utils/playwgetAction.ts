@@ -29,18 +29,26 @@ async function playwgetAction(page: any, webpage: any, client: any) {
     for (let line of lines) {
       // screenshot before action
       let ssobj: any = {};
-      let screenshot = await cdpScreenshot(client);
-      const resizedImg = await imgResize(screenshot);
-      if (resizedImg) {
-        ssobj.thumbnail = resizedImg.toString('base64');
+      let screenshot;
+      if (client) {
+        screenshot = await cdpScreenshot(client);
+      } else {
+        screenshot = await page.screenshot({ fullPage: true });
       }
-      //let fullscreenshot = screenshot;
-      let fss = await saveFullscreenshot(screenshot, []);
-      if (fss) {
-        ssobj.full = new mongoose.Types.ObjectId(fss);
+      if (screenshot) {
+        const resizedImg = await imgResize(screenshot);
+        if (resizedImg) {
+          ssobj.thumbnail = resizedImg.toString('base64');
+        }
+        let fss = await saveFullscreenshot(screenshot, []);
+        if (fss) {
+          ssobj.full = new mongoose.Types.ObjectId(fss);
+        }
       }
-      //console.log(ssobj);
-      ssarray.push(ssobj);
+      if (ssobj) {
+        //console.log(ssobj);
+        ssarray.push(ssobj);
+      }
       // actions
       let elem = line.split('>');
       let action = elem[0]?.trim();
