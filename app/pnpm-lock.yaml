@@ -35,6 +35,9 @@ importers:
       archiver-zip-encrypted:
         specifier: ^2.0.0
         version: 2.0.0
+      baseline-browser-mapping:
+        specifier: ^2.8.30
+        version: 2.8.30
       bullmq:
         specifier: ^5.58.4
         version: 5.58.7
@@ -817,8 +820,8 @@ packages:
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
     hasBin: true
 
-  '@maxmind/geoip2-node@6.2.0':
-    resolution: {integrity: sha512-g74CyaCQ9m53o9APE2KBzgXSLGoKX2bGpbsgSYqeBeCYw2BSymgPB2Vt5hyLA/sVOdpKYgYDuYWF+8hCSFPEiw==}
+  '@maxmind/geoip2-node@6.3.0':
+    resolution: {integrity: sha512-UXODZOrcXEdsw6fj3iEMgGZ/vz2ctzSiqbS3lHd7Sk21DbmVssiF7ywDuYcQ9YrqnIx/I2HkSplw3eIMKD1EGQ==}
 
   '@mongodb-js/saslprep@1.3.0':
     resolution: {integrity: sha512-zlayKCsIjYb7/IdfqxorK5+xUMyi4vOKcFy10wKJYc63NSdKI8mNME+uJqfatkPmOSMMUiojrL58IePKBm3gvQ==}
@@ -1472,8 +1475,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.8.6:
-    resolution: {integrity: sha512-wrH5NNqren/QMtKUEEJf7z86YjfqW/2uw3IL3/xpqZUC95SSVIFXYQeeGjL6FT/X68IROu6RMehZQS5foy2BXw==}
+  baseline-browser-mapping@2.8.30:
+    resolution: {integrity: sha512-aTUKW4ptQhS64+v2d6IkPzymEzzhw+G0bA1g3uBRV3+ntkH+svttKseW5IOR4Ed6NUVKqnY7qT3dKvzQ7io4AA==}
     hasBin: true
 
   basic-ftp@5.0.5:
@@ -5539,7 +5542,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@maxmind/geoip2-node@6.2.0':
+  '@maxmind/geoip2-node@6.3.0':
     dependencies:
       maxmind: 5.0.1
 
@@ -6472,7 +6475,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.8.6: {}
+  baseline-browser-mapping@2.8.30: {}
 
   basic-ftp@5.0.5: {}
 
@@ -6521,7 +6524,7 @@ snapshots:
 
   browserslist@4.26.2:
     dependencies:
-      baseline-browser-mapping: 2.8.6
+      baseline-browser-mapping: 2.8.30
       caniuse-lite: 1.0.30001743
       electron-to-chromium: 1.5.222
       node-releases: 2.0.21
@@ -8516,7 +8519,7 @@ snapshots:
 
   node-xwhois@2.0.10:
     dependencies:
-      '@maxmind/geoip2-node': 6.2.0
+      '@maxmind/geoip2-node': 6.3.0
       ip2location-nodejs: 9.7.0
       ip2proxy-nodejs: 4.4.0
       jszip: 3.10.1

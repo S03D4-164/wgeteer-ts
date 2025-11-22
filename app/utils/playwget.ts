@@ -266,6 +266,42 @@ async function playwget(pageId: string): Promise<string | undefined> {
     await docToArray(request);
   });
 
+  page.on('websocket', async function (ws: any) {
+    let url = ws.url();
+    console.log('ws', url);
+    ws.on('socketerror', async function (data: any) {
+      if (data) await wsToArray(url, 'error', data);
+    });
+    ws.on('framereceived', async function (data: any) {
+      if (data?.payload) await wsToArray(url, 'received', data.payload);
+    });
+    ws.on('framesent', async function (data: any) {
+      if (data?.payload) await wsToArray(url, 'sent', data.payload);
+    });
+  });
+  async function wsToArray(url: String, frame: String, data: any) {
+    try {
+      console.log(url, frame, data);
+      const res = {
+        webpage: pageId,
+        url,
+        statusText: frame,
+        text: data,
+        mimeType: 'websocket',
+      };
+      responseArray.push(res);
+      const req: any = {
+        webpage: pageId,
+        url,
+        method: frame,
+        resourceType: 'websocket',
+      };
+      requestArray.push(req);
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
   async function docToArray(request: any): Promise<void> {
     try {
       /*

@@ -55,8 +55,10 @@ async function parseHeaders(headers: any) {
   //console.log(headers);
   let parsedHeaders: any = {};
   try {
-    for (let header of headers) {
-      parsedHeaders[header.name.toLowerCase()] = [header.value];
+    if (headers) {
+      for (let header of headers) {
+        parsedHeaders[header.name.toLowerCase()] = [header.value];
+      }
     }
   } catch (err) {
     const entries = Object.entries(headers);
