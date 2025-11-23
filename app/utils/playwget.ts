@@ -199,6 +199,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
   let responseArray: any[] = [];
   let wsObj: any = {};
 
+  // websocket
   await client.send('Network.enable');
   client.on('Network.webSocketClosed', async (ws) => {
     console.log('closed', ws);
@@ -214,9 +215,12 @@ async function playwget(pageId: string): Promise<string | undefined> {
   });
   client.on('Network.webSocketFrameError', async (ws) => {
     console.log('error', ws);
+    wsObj[ws.requestId]['response'] = {};
+    wsObj[ws.requestId]['messages'].push(ws.errorMessage);
+    await wsObjToArray(wsObj[ws.requestId], ws.requestId);
   });
   client.on('Network.webSocketFrameReceived', async (ws) => {
-    console.log('received', wsObj);
+    console.log('received', ws);
     let msg = {
       frame: 'received',
       ...ws,
@@ -224,7 +228,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     wsObj[ws.requestId]['messages'].push(msg);
   });
   client.on('Network.webSocketFrameSent', async (ws) => {
-    console.log('sent', wsObj);
+    console.log('sent', ws);
     let msg = {
       frame: 'sent',
       ...ws,
@@ -232,12 +236,12 @@ async function playwget(pageId: string): Promise<string | undefined> {
     wsObj[ws.requestId]['messages'].push(msg);
   });
   client.on('Network.webSocketHandshakeResponseReceived', async (ws) => {
-    //console.log('response', wsObj);
+    console.log('response', ws);
     wsObj[ws.requestId]['response'] = ws.response;
     await wsObjToArray(wsObj[ws.requestId], ws.requestId);
   });
   client.on('Network.webSocketWillSendHandshakeRequest', async (ws) => {
-    //console.log('request', wsObj);
+    console.log('request', ws);
     wsObj[ws.requestId]['request'] = ws.request;
   });
 
@@ -247,15 +251,15 @@ async function playwget(pageId: string): Promise<string | undefined> {
       const req = {
         webpage: pageId,
         url: ws.url,
-        headers: ws.request.headers,
+        headers: ws.request?.headers,
         interceptionId,
       };
       const res = {
         webpage: pageId,
         url: ws.url,
-        status: ws.response.status,
-        statusText: ws.response.statusText,
-        headers: ws.response.headers,
+        status: ws.response?.status,
+        statusText: ws.response?.statusText,
+        headers: ws.response?.headers,
         interceptionId,
       };
       if (res && responseArray != null) {
@@ -505,12 +509,12 @@ async function playwget(pageId: string): Promise<string | undefined> {
   let tmpArray = [];
   for (let res of responseArray) {
     Object.entries(wsObj).forEach(([key, value]: any) => {
-      console.log(key, value);
       if (res.interceptionId == key) {
+        console.log(key, value);
         res.text = JSON.stringify(value['messages'], null, 2);
       }
     });
-    console.log(res);
+    //console.log(res);
     tmpArray.push(res);
   }
   responseArray = tmpArray;
