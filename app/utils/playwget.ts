@@ -197,8 +197,78 @@ async function playwget(pageId: string): Promise<string | undefined> {
   let responseCache: any[] = [];
   let requestArray: any[] = [];
   let responseArray: any[] = [];
+  let wsObj: any = {};
 
-  //await client.send('Network.enable');
+  await client.send('Network.enable');
+  client.on('Network.webSocketClosed', async (ws) => {
+    console.log('closed', ws);
+  });
+  client.on('Network.webSocketCreated', async (ws) => {
+    //console.log('created', wsObj);
+    wsObj[ws.requestId] = {
+      url: ws.url,
+      request: {},
+      response: {},
+      messages: [],
+    };
+  });
+  client.on('Network.webSocketFrameError', async (ws) => {
+    console.log('error', ws);
+  });
+  client.on('Network.webSocketFrameReceived', async (ws) => {
+    console.log('received', wsObj);
+    let msg = {
+      frame: 'received',
+      ...ws,
+    };
+    wsObj[ws.requestId]['messages'].push(msg);
+  });
+  client.on('Network.webSocketFrameSent', async (ws) => {
+    console.log('sent', wsObj);
+    let msg = {
+      frame: 'sent',
+      ...ws,
+    };
+    wsObj[ws.requestId]['messages'].push(msg);
+  });
+  client.on('Network.webSocketHandshakeResponseReceived', async (ws) => {
+    //console.log('response', wsObj);
+    wsObj[ws.requestId]['response'] = ws.response;
+    await wsObjToArray(wsObj[ws.requestId], ws.requestId);
+  });
+  client.on('Network.webSocketWillSendHandshakeRequest', async (ws) => {
+    //console.log('request', wsObj);
+    wsObj[ws.requestId]['request'] = ws.request;
+  });
+
+  async function wsObjToArray(ws: any, interceptionId: String) {
+    console.log(ws);
+    try {
+      const req = {
+        webpage: pageId,
+        url: ws.url,
+        headers: ws.request.headers,
+        interceptionId,
+      };
+      const res = {
+        webpage: pageId,
+        url: ws.url,
+        status: ws.response.status,
+        statusText: ws.response.statusText,
+        headers: ws.response.headers,
+        interceptionId,
+      };
+      if (res && responseArray != null) {
+        responseArray.push(res);
+      }
+      if (req && requestArray != null) {
+        requestArray.push(req);
+      }
+    } catch (error: any) {
+      logger.error(error);
+    }
+  }
+
   await client.send('Fetch.enable', {
     patterns: [
       {
@@ -213,7 +283,6 @@ async function playwget(pageId: string): Promise<string | undefined> {
       /*logger.debug(
         `[Intercepted] ${requestId}, ${responseStatusCode}, ${request.url}`,
       );*/
-
       let cache: {
         url: string;
         status: number;
@@ -266,42 +335,6 @@ async function playwget(pageId: string): Promise<string | undefined> {
     await docToArray(request);
   });
 
-  page.on('websocket', async function (ws: any) {
-    let url = ws.url();
-    console.log('ws', url);
-    ws.on('socketerror', async function (data: any) {
-      if (data) await wsToArray(url, 'error', data);
-    });
-    ws.on('framereceived', async function (data: any) {
-      if (data?.payload) await wsToArray(url, 'received', data.payload);
-    });
-    ws.on('framesent', async function (data: any) {
-      if (data?.payload) await wsToArray(url, 'sent', data.payload);
-    });
-  });
-  async function wsToArray(url: String, frame: String, data: any) {
-    try {
-      console.log(url, frame, data);
-      const res = {
-        webpage: pageId,
-        url,
-        statusText: frame,
-        text: data,
-        mimeType: 'websocket',
-      };
-      responseArray.push(res);
-      const req: any = {
-        webpage: pageId,
-        url,
-        method: frame,
-        resourceType: 'websocket',
-      };
-      requestArray.push(req);
-    } catch (err) {
-      console.log(err);
-    }
-  }
-
   async function docToArray(request: any): Promise<void> {
     try {
       /*
@@ -333,7 +366,6 @@ async function playwget(pageId: string): Promise<string | undefined> {
     }
   }
   /*
-  await client.send('Network.enable');
 
   // Store the favicon data here
   const faviconData: { [url: string]: any } = {};
@@ -379,7 +411,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     const { fonts } = await client.send('CSS.getPlatformFontsForNode', {
       nodeId: nodeId,
     });
-    console.log(fonts);
+    //console.log(fonts);
 
     await playwgetAction(page, webpage, client);
   } catch (err: any) {
@@ -468,6 +500,20 @@ async function playwget(pageId: string): Promise<string | undefined> {
       logger.error(`[${pageId}] ${err}`);
     }
   }
+
+  // convert websocket messages to text
+  let tmpArray = [];
+  for (let res of responseArray) {
+    Object.entries(wsObj).forEach(([key, value]: any) => {
+      console.log(key, value);
+      if (res.interceptionId == key) {
+        res.text = JSON.stringify(value['messages'], null, 2);
+      }
+    });
+    console.log(res);
+    tmpArray.push(res);
+  }
+  responseArray = tmpArray;
 
   let responses = (await ResponseModel.find({ webpage })) || [];
   if (responses.length == 0) {
