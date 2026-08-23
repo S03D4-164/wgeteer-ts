@@ -47,13 +47,17 @@ async function genPage(
     channel: 'chrome',
     headless: false,
     viewport: null,
-    recordHar: { path: `${userDataDir}/pw.har` },
     ignoreHTTPSErrors: true,
     args: chromiumArgs,
     ignoreDefaultArgs: ['--enable-automation'], // hide infobar
     javaScriptEnabled: true,
     timezoneId: 'Asia/Tokyo',
   };
+
+  // saveHarfile オプションがある場合のみ HARファイルを記録
+  if (webpage.option?.saveHarfile) {
+    options.recordHar = { path: `${userDataDir}/pw.har` };
+  }
   let exHeaders: Record<string, string> = {};
   if (webpage.option?.lang) {
     exHeaders['Accept-Language'] = webpage.option.lang;
@@ -101,6 +105,15 @@ async function genPage(
 
 async function playwget(pageId: string): Promise<string | undefined> {
   logger.debug(`[${pageId}] playwget start`);
+
+  // リトライ時に前のプロセスが残っている可能性があるので、事前に強制クリーンアップ
+  try {
+    await cleanup(pageId, undefined);
+    await new Promise((done) => setTimeout(done, 500));
+  } catch (err) {
+    logger.error(`[${pageId}] pre-cleanup failed: ${err}`);
+  }
+
   let webpage: any;
   try {
     webpage = await WebpageModel.findById(pageId).exec();
@@ -144,6 +157,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
   }
   //logger.debug(webpage.option);
 
+  // xvfb は常に起動（Playwright headless mode 使用時のため）
   const xvfb = new Xvfb({
     displayNum,
     reuse: false,
@@ -406,17 +420,25 @@ async function playwget(pageId: string): Promise<string | undefined> {
     // Turnstile check
     await checkTurnstile(page);
 
-    const { root } = await client.send('DOM.getDocument');
-    const { nodeId } = await client.send('DOM.querySelector', {
-      nodeId: root.nodeId,
-      selector: 'html',
-    });
-    await client.send('CSS.enable');
-    const { fonts } = await client.send('CSS.getPlatformFontsForNode', {
-      nodeId: nodeId,
-    });
-    //console.log(fonts);
-
+    /*
+    try 
+      const { root } = await client.send('DOM.getDocument');
+      const { nodeId } = await client.send('DOM.querySelector', {
+        nodeId: root.nodeId,
+        selector: 'html',
+      });
+      await client.send('CSS.enable');
+      const { fonts } = await client.send('CSS.getPlatformFontsForNode', {
+        nodeId: nodeId,
+      });
+      //console.log(fonts);
+    } catch (err: any) {
+      logger.debug(
+        `[${pageId}] DOM/CSS analysis failed (non-fatal): ${err.message}`,
+      );
+      // DOM/CSS 取得失敗は continue（不要な情報取得なので無視）
+    }
+    */
     await playwgetAction(page, webpage, client);
   } catch (err: any) {
     logger.error(`[${pageId}] ${page.isClosed()} ${err}`);
@@ -442,27 +464,35 @@ async function playwget(pageId: string): Promise<string | undefined> {
     if (fss) {
       webpage.screenshot = new mongoose.Types.ObjectId(fss);
     }
-    const pngPath = `${dataDir}/${pageId}/screenshot.png`;
-    const xwd = execSync(
-      `xwd -display :${displayNum} -root -silent | convert xwd:- png:${pngPath}`,
-    );
-    if (fs.existsSync(pngPath)) {
-      const pngData = fs.readFileSync(pngPath);
-      let ssobj: any = {};
-      const resizedImg = await imgResize(pngData);
-      if (resizedImg) {
-        ssobj.thumbnail = resizedImg.toString('base64');
+
+    // captureDisplay オプションがある場合のみ xwd でスクリーンショット取得
+    if (webpage.option?.captureDisplay) {
+      const pngPath = `${dataDir}/${pageId}/screenshot.png`;
+      try {
+        const xwd = execSync(
+          `xwd -display :${displayNum} -root -silent | convert xwd:- png:${pngPath}`,
+        );
+        if (fs.existsSync(pngPath)) {
+          const pngData = fs.readFileSync(pngPath);
+          let ssobj: any = {};
+          const resizedImg = await imgResize(pngData);
+          if (resizedImg) {
+            ssobj.thumbnail = resizedImg.toString('base64');
+          }
+          let tag = [
+            {
+              url: webpage.url,
+            },
+          ];
+          let fss = await saveFullscreenshot(pngData, tag);
+          if (fss) {
+            ssobj.full = new mongoose.Types.ObjectId(fss);
+          }
+          webpage.screenshots.push(ssobj);
+        }
+      } catch (err) {
+        logger.error(`[${pageId}] xwd screenshot failed: ${err}`);
       }
-      let tag = [
-        {
-          url: webpage.url,
-        },
-      ];
-      let fss = await saveFullscreenshot(pngData, tag);
-      if (fss) {
-        ssobj.full = new mongoose.Types.ObjectId(fss);
-      }
-      webpage.screenshots.push(ssobj);
     }
     /*
     if (faviconData) {
@@ -489,10 +519,16 @@ async function playwget(pageId: string): Promise<string | undefined> {
   let requests = (await RequestModel.find({ webpage })) || [];
   if (requests.length == 0) {
     try {
+      // saveLimit を取得（デフォルトは100）
+      const saveLimit = webpage.option?.saveLimit || 100;
+      const limitedRequestArray = requestArray.slice(0, saveLimit);
+
       let start = new Date();
-      logger.debug(`[${pageId}] request save: ${requestArray.length}`);
+      logger.debug(
+        `[${pageId}] request save: ${limitedRequestArray.length} (total: ${requestArray.length})`,
+      );
       //console.log(requestArray);
-      requests = await RequestModel.insertMany(requestArray, {
+      requests = await RequestModel.insertMany(limitedRequestArray, {
         ordered: false,
       });
       let end = new Date();
@@ -521,11 +557,17 @@ async function playwget(pageId: string): Promise<string | undefined> {
 
   let responses = (await ResponseModel.find({ webpage })) || [];
   if (responses.length == 0) {
+    // saveLimit を取得（デフォルトは100）
+    const saveLimit = webpage.option?.saveLimit || 100;
+    const limitedResponseArray = responseArray.slice(0, saveLimit);
+
     if (webpage.option.bulksave) {
       try {
         let start = new Date();
-        logger.debug(`[${pageId}] response bulk save: ${responseArray.length}`);
-        responses = await ResponseModel.insertMany(responseArray, {
+        logger.debug(
+          `[${pageId}] response bulk save: ${limitedResponseArray.length} (total: ${responseArray.length})`,
+        );
+        responses = await ResponseModel.insertMany(limitedResponseArray, {
           ordered: false,
           //rawResult: true,
         });
@@ -541,8 +583,13 @@ async function playwget(pageId: string): Promise<string | undefined> {
   }
   if (responses.length == 0) {
     let start = new Date();
-    logger.debug(`[${pageId}] response save: ${responseArray.length}`);
-    for (let res of responseArray) {
+    const saveLimit = webpage.option?.saveLimit || 100;
+    const limitedResponseArray = responseArray.slice(0, saveLimit);
+
+    logger.debug(
+      `[${pageId}] response save: ${limitedResponseArray.length} (total: ${responseArray.length})`,
+    );
+    for (let res of limitedResponseArray) {
       try {
         const newRes = new ResponseModel(res);
         await newRes.save();
@@ -562,21 +609,61 @@ async function playwget(pageId: string): Promise<string | undefined> {
     await webpage.save();
     //flexDoc(webpage);
     // Waits for all the reported 'request' events to resolve.
-    //page.removeAllListeners();
-    //await page.close();
-    //await browserContext.clearPermissions();
-    //await browserContext.clearCookies();
-    //browserContext.removeAllListeners();
+
+    // リスナーを削除してからクローズ（pending リクエスト処理を防止）
+    page.removeAllListeners('requestfailed');
+    page.removeAllListeners('requestfinished');
+    page.removeAllListeners('load');
+    page.removeAllListeners('domcontentloaded');
+    page.removeAllListeners('dialog');
+
     const browser = browserContext.browser();
-    await browserContext.close();
-    await new Promise((done) => setTimeout(done, 1000));
-    await browser?.close();
-    await new Promise((done) => setTimeout(done, 1000));
-    xvfb.stopSync();
+
+    try {
+      await browserContext.close();
+      await new Promise((done) => setTimeout(done, 500));
+    } catch (err) {
+      logger.error(`[${pageId}] browserContext.close() failed: ${err}`);
+    }
+
+    try {
+      await browser?.close();
+      await new Promise((done) => setTimeout(done, 500));
+    } catch (err) {
+      logger.error(`[${pageId}] browser.close() failed: ${err}`);
+    }
+
+    try {
+      xvfb.stopSync();
+    } catch (err) {
+      logger.error(`[${pageId}] xvfb.stopSync() failed: ${err}`);
+    }
+
+    // 強制クリーンアップ：残っているプロセスを確実に殺す
+    try {
+      await cleanup(pageId, displayNum);
+    } catch (err) {
+      logger.error(`[${pageId}] cleanup failed: ${err}`);
+    }
+
     logger.debug(`[${pageId}] webpage saved`);
     return pageId;
   } catch (err) {
     logger.error(`[${pageId}] ${err}`);
+    // エラー時も必ずリスナーを削除してからクリーンアップ
+    try {
+      page.removeAllListeners('requestfailed');
+      page.removeAllListeners('requestfinished');
+      page.removeAllListeners('load');
+      page.removeAllListeners('domcontentloaded');
+      page.removeAllListeners('dialog');
+
+      await cleanup(pageId, displayNum);
+    } catch (cleanupErr) {
+      logger.error(
+        `[${pageId}] cleanup in error handler failed: ${cleanupErr}`,
+      );
+    }
     return undefined;
   }
 }

@@ -36,16 +36,15 @@ const mongoConnectionString = 'mongodb://127.0.0.1:27017/wgeteer';
 
 mongoose
   .connect(mongoConnectionString, {
-    maxPoolSize: 1000,
-    // useNewUrlParser: true,  // No longer required
-    // useCreateIndex: true,   // No longer required
-    // useFindAndModify: false, // No longer required
-    //useUnifiedTopology: true,
+    maxPoolSize: 50,
+    minPoolSize: 10, // 最小接続数を設定
+    maxIdleTimeMS: 30000, // アイドル接続を30秒で閉じる
+    socketTimeoutMS: 45000, // ソケットタイムアウト 45秒
   })
   .then(() => logger.debug('[mongoose] connect completed'))
   .catch((err: Error) => logger.debug('[mongoose] connect error', err));
 
-mongoose.set('maxTimeMS', 30000);
+mongoose.set('maxTimeMS', 45000); // クエリタイムアウト 45秒に延長
 
 // Import models to ensure they are defined
 import './models/webpage';
@@ -59,9 +58,9 @@ const agenda = new Agenda({
     address: mongoConnectionString,
     collection: 'agendaJobs',
   },
-  processEvery: '5 seconds',
-  defaultLockLifetime: 1000 * 60 * 3,
-  defaultConcurrency: 5,
+  processEvery: '10 seconds',
+  defaultLockLifetime: 1000 * 60 * 5, // 5分
+  defaultConcurrency: 3, // 同時実行数
 });
 
 agenda.on('ready', async function () {

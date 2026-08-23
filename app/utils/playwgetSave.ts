@@ -209,12 +209,130 @@ async function saveHarfile(
   }
 }
 
+async function linkRequestsAndResponses(pageId: string): Promise<void> {
+  logger.debug(`[${pageId}] Linking requests and responses...`);
+
+  let webpage = await WebpageModel.findById(pageId).exec();
+  let requests: any[] = [];
+  let responses: any[] = [];
+
+  requests = await RequestModel.find({ webpage });
+  responses = await ResponseModel.find({ webpage });
+
+  if (webpage) {
+    let finalResponse: any;
+    try {
+      let doneReq: any[] = [];
+      let doneRes: any[] = [];
+      if (requests && responses) {
+        for (const res of responses) {
+          for (const req of requests) {
+            if (
+              res.url === req.url &&
+              !doneReq.includes(req._id) &&
+              !doneRes.includes(res._id)
+            ) {
+              res.request = req._id;
+              req.response = res._id;
+              doneReq.push(req._id);
+              doneRes.push(res._id);
+              break;
+            }
+          }
+        }
+      }
+
+      if (requests) {
+        await RequestModel.bulkSave(requests, { ordered: false });
+        requests = await RequestModel.find({ webpage }).sort({
+          interceptionId: 1,
+        });
+        webpage.requests = requests;
+      }
+      if (responses) {
+        responses = await analyzeResponses(responses);
+        await ResponseModel.bulkSave(responses, {
+          ordered: false,
+        });
+        responses = await ResponseModel.find({ webpage }).sort({
+          interceptionId: 1,
+        });
+        webpage.responses = responses;
+
+        if (webpage.url) {
+          for (const res of responses) {
+            if (res.url && res.url === webpage.url) {
+              finalResponse = res;
+              break;
+            }
+          }
+        }
+
+        if (!finalResponse) {
+          if (responses.length === 1) {
+            finalResponse = responses[0];
+            webpage.url = finalResponse.url;
+          }
+        }
+      }
+      if (finalResponse) {
+        if (webpage.error && finalResponse.status == 200) {
+          webpage.error = undefined;
+        }
+        webpage.status = finalResponse.status;
+        webpage.headers = finalResponse.headers;
+        webpage.remoteAddress = finalResponse.remoteAddress;
+        webpage.securityDetails = finalResponse.securityDetails;
+
+        const wapps = await analyzePage(webpage);
+        if (wapps) webpage.wappalyzer = wapps;
+
+        if (webpage.remoteAddress?.ip) {
+          logger.info(webpage.remoteAddress);
+          let hostinfo = await getHostInfo(webpage.remoteAddress.ip);
+          logger.info(hostinfo);
+          if (hostinfo) {
+            const remoteAddress: any = {};
+            if (hostinfo.reverse) remoteAddress.reverse = hostinfo.reverse;
+            if (hostinfo.bgp) remoteAddress.bgp = hostinfo.bgp;
+            if (hostinfo.geoip) remoteAddress.geoip = hostinfo.geoip;
+            if (hostinfo.ip) remoteAddress.ip = hostinfo.ip;
+            else remoteAddress.ip = webpage.remoteAddress.ip;
+            remoteAddress.port = webpage.remoteAddress.port;
+            webpage.remoteAddress = remoteAddress;
+          }
+        }
+      }
+
+      await webpage?.save();
+      responses = await setResponseIps(responses);
+      await ResponseModel.bulkSave(responses, {
+        ordered: false,
+      });
+    } catch (err) {
+      logger.error(`[${pageId}] Error linking requests and responses: ${err}`);
+    }
+  }
+}
+
 async function harparse(pageId: string): Promise<void> {
   const dataDir = `/tmp/ppengo/${pageId}`;
   const recordHar = `${dataDir}/pw.har`;
+
+  // HARファイルが存在しない場合は処理を終了
+  if (!fs.existsSync(recordHar)) {
+    logger.debug(`[${pageId}] HAR file does not exist, skipping harparse`);
+    return;
+  }
+
   logger.info(`${recordHar}`);
 
   let webpage = await WebpageModel.findById(pageId).exec();
+
+  // saveLimit を取得（デフォルトは100）
+  const saveLimit = webpage?.option?.saveLimit || 100;
+  logger.debug(`[${pageId}] saveLimit: ${saveLimit}`);
+
   let requests: any[] = [];
   requests = await RequestModel.find({ webpage });
   let responses: any[] = [];
@@ -230,6 +348,14 @@ async function harparse(pageId: string): Promise<void> {
       const entries = har.log.entries;
       let i = 1;
       for (const entry of entries) {
+        // saveLimit に達したら処理を終了
+        if (requestArray.length >= saveLimit) {
+          logger.debug(
+            `[${pageId}] Reached saveLimit (${saveLimit}), stopping collection`,
+          );
+          break;
+        }
+
         if (!entry.request.url.startsWith('chrome-extension')) {
           let request = await saveRequest(
             entry.request,
@@ -258,8 +384,19 @@ async function harparse(pageId: string): Promise<void> {
           i++;
         }
       }
+
+      if (requestArray.length >= saveLimit) {
+        logger.info(
+          `[${pageId}] Saved only first ${saveLimit} requests due to saveLimit`,
+        );
+      }
     } catch (error) {
-      console.log(error);
+      // HARファイルが存在しない場合、またはパースに失敗した場合
+      if (fs.existsSync(recordHar)) {
+        logger.error(`Failed to parse HAR file: ${error}`);
+      } else {
+        logger.debug(`HAR file does not exist: ${recordHar}`);
+      }
     }
     if (requests.length == 0) {
       try {
@@ -415,9 +552,17 @@ async function harparse(pageId: string): Promise<void> {
       }
 
       let harId;
-      if (fs.existsSync(recordHar) && webpage) {
-        harId = await saveHarfile(recordHar, pageId);
-        if (harId) webpage.harfile = new mongoose.Types.ObjectId(harId);
+      if (fs.existsSync(recordHar)) {
+        try {
+          harId = await saveHarfile(recordHar, pageId);
+          if (harId) webpage.harfile = new mongoose.Types.ObjectId(harId);
+        } catch (err) {
+          logger.error(`Failed to save HAR file: ${err}`);
+        }
+      } else {
+        logger.debug(
+          `HAR file not found (saveHarfile option may be disabled): ${recordHar}`,
+        );
       }
       //logger.debug(webpage.remoteAddress);
       await webpage?.save();
@@ -439,4 +584,4 @@ async function harparse(pageId: string): Promise<void> {
 }
 
 export default harparse;
-export { savePayload };
+export { savePayload, linkRequestsAndResponses };
