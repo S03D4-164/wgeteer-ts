@@ -13,7 +13,7 @@ import gsblookupUrl from './services/gsblookupUrl';
 
 import { Worker, Job } from 'bullmq';
 import pw from './utils/playwget';
-import harparse from './utils/playwgetSave';
+// import harparse from './utils/playwgetSave';
 
 const worker = new Worker(
   'ppengo',
@@ -21,7 +21,7 @@ const worker = new Worker(
     //console.log(job);
     if (job.name === 'playwget') {
       await pw(job.data.pageId);
-      await harparse(job.data.pageId);
+      // await harparse(job.data.pageId);
     }
   },
   {
@@ -59,7 +59,7 @@ const agenda = new Agenda({
     collection: 'agendaJobs',
   },
   processEvery: '10 seconds',
-  defaultLockLifetime: 1000 * 60 * 5, // 5分
+  defaultLockLifetime: 1000 * 60 * 3, // 3分
   defaultConcurrency: 3, // 同時実行数
 });
 

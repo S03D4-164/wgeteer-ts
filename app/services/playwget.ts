@@ -21,7 +21,7 @@ export default async (agenda: Agenda) => {
             await harparse(data.pageId);
           } else {
             // HARファイルなしでも紐付けとIP情報を取得
-            await linkRequestsAndResponses(data.pageId);
+            //await linkRequestsAndResponses(data.pageId);
           }
         } catch (err) {
           logger.error(

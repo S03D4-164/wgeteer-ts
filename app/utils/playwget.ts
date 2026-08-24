@@ -28,6 +28,7 @@ import { spawn } from 'node:child_process';
 import cleanup from './playwgetCleanup';
 import { playwgetAction } from './playwgetAction';
 import pptrEventSet from './playwgetEvent';
+import { EventEmitter } from 'events';
 
 const dataDir = '/tmp/ppengo';
 
@@ -135,7 +136,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
   }
 
   const displayNum = `${Math.floor(Math.random() * (99999 - 99)) + 99}`;
-  await cleanup(pageId, undefined);
+  //await cleanup(pageId, undefined);
 
   const chromiumArgs = [
     '--no-sandbox',
@@ -175,14 +176,14 @@ async function playwget(pageId: string): Promise<string | undefined> {
     ],
   });
   xvfb.startSync();
-  await new Promise((done) => setTimeout(done, 3000));
+  await new Promise((done) => setTimeout(done, 5000));
 
   const fluxbox = spawn(
     '/usr/bin/fluxbox',
     ['-display', `:${displayNum}`, '-screen', '0'],
     { detached: true, timeout: 5 * 60 * 1000 },
   );
-  await new Promise((done) => setTimeout(done, 3000));
+  await new Promise((done) => setTimeout(done, 5000));
 
   await fs.promises.mkdir(`${dataDir}/${webpage._id}`, { recursive: true });
   await fs.promises.writeFile(
@@ -228,13 +229,13 @@ async function playwget(pageId: string): Promise<string | undefined> {
     };
   });
   client.on('Network.webSocketFrameError', async (ws) => {
-    console.log('error', ws);
+    //console.log('error', ws);
     wsObj[ws.requestId]['response'] = {};
     wsObj[ws.requestId]['messages'].push(ws.errorMessage);
     await wsObjToArray(wsObj[ws.requestId], ws.requestId);
   });
   client.on('Network.webSocketFrameReceived', async (ws) => {
-    console.log('received', ws);
+    //console.log('received', ws);
     let msg = {
       frame: 'received',
       ...ws,
@@ -242,7 +243,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     wsObj[ws.requestId]['messages'].push(msg);
   });
   client.on('Network.webSocketFrameSent', async (ws) => {
-    console.log('sent', ws);
+    //console.log('sent', ws);
     let msg = {
       frame: 'sent',
       ...ws,
@@ -250,17 +251,17 @@ async function playwget(pageId: string): Promise<string | undefined> {
     wsObj[ws.requestId]['messages'].push(msg);
   });
   client.on('Network.webSocketHandshakeResponseReceived', async (ws) => {
-    console.log('response', ws);
+    //console.log('response', ws);
     wsObj[ws.requestId]['response'] = ws.response;
     await wsObjToArray(wsObj[ws.requestId], ws.requestId);
   });
   client.on('Network.webSocketWillSendHandshakeRequest', async (ws) => {
-    console.log('request', ws);
+    //console.log('request', ws);
     wsObj[ws.requestId]['request'] = ws.request;
   });
 
   async function wsObjToArray(ws: any, interceptionId: String) {
-    console.log(ws);
+    //console.log(ws);
     try {
       const req = {
         webpage: pageId,
@@ -440,6 +441,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     }
     */
     await playwgetAction(page, webpage, client);
+    await page.evaluate(() => window.stop());
   } catch (err: any) {
     logger.error(`[${pageId}] ${page.isClosed()} ${err}`);
     if (page.isClosed()) {
@@ -451,11 +453,29 @@ async function playwget(pageId: string): Promise<string | undefined> {
   logger.debug(`[${pageId}] goto completed ${webpage.input}`);
 
   try {
+    // ページが閉じられていないか確認
+    if (page.isClosed()) {
+      logger.error(`[${pageId}] Page is closed after goto`);
+      return;
+    }
+
     webpage.url = page.url();
     logger.debug(`[${pageId}] ${webpage.url}`);
-    webpage.title = await page.title();
-    logger.debug(`[${pageId}] ${webpage.title}`);
-    webpage.content = await page.content();
+
+    try {
+      webpage.title = await page.title();
+      logger.debug(`[${pageId}] ${webpage.title}`);
+    } catch (titleErr: any) {
+      logger.warn(`[${pageId}] Failed to get title: ${titleErr.message}`);
+      webpage.title = '';
+    }
+
+    try {
+      webpage.content = await page.content();
+    } catch (contentErr: any) {
+      logger.warn(`[${pageId}] Failed to get content: ${contentErr.message}`);
+      webpage.content = '';
+    }
 
     const screenshot = await cdpScreenshot(client);
     const resizedImg = await imgResize(screenshot);
@@ -617,6 +637,13 @@ async function playwget(pageId: string): Promise<string | undefined> {
     page.removeAllListeners('domcontentloaded');
     page.removeAllListeners('dialog');
 
+    // CDPセッションもリスナー削除
+    try {
+      (client as unknown as EventEmitter).removeAllListeners();
+    } catch (err) {
+      logger.debug(`[${pageId}] client.removeAllListeners() failed: ${err}`);
+    }
+
     const browser = browserContext.browser();
 
     try {
@@ -657,6 +684,15 @@ async function playwget(pageId: string): Promise<string | undefined> {
       page.removeAllListeners('load');
       page.removeAllListeners('domcontentloaded');
       page.removeAllListeners('dialog');
+
+      // CDPセッションもリスナー削除
+      try {
+        (client as unknown as EventEmitter).removeAllListeners();
+      } catch (err) {
+        logger.debug(
+          `[${pageId}] client.removeAllListeners() in error handler failed: ${err}`,
+        );
+      }
 
       await cleanup(pageId, displayNum);
     } catch (cleanupErr) {
