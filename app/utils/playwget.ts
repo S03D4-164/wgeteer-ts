@@ -29,6 +29,7 @@ import cleanup from './playwgetCleanup';
 import { playwgetAction } from './playwgetAction';
 import pptrEventSet from './playwgetEvent';
 import { EventEmitter } from 'events';
+import { setResponseIps } from './ipInfo';
 
 const dataDir = '/tmp/ppengo';
 
@@ -441,7 +442,7 @@ async function playwget(pageId: string): Promise<string | undefined> {
     }
     */
     await playwgetAction(page, webpage, client);
-    await page.evaluate(() => window.stop());
+    //await page.evaluate(() => window.stop());
   } catch (err: any) {
     logger.error(`[${pageId}] ${page.isClosed()} ${err}`);
     if (page.isClosed()) {
@@ -579,8 +580,8 @@ async function playwget(pageId: string): Promise<string | undefined> {
   if (responses.length == 0) {
     // saveLimit を取得（デフォルトは100）
     const saveLimit = webpage.option?.saveLimit || 100;
-    const limitedResponseArray = responseArray.slice(0, saveLimit);
-
+    let limitedResponseArray = responseArray.slice(0, saveLimit);
+    limitedResponseArray = await setResponseIps(limitedResponseArray);
     if (webpage.option.bulksave) {
       try {
         let start = new Date();

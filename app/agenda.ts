@@ -32,7 +32,7 @@ const worker = new Worker(
   },
 );
 
-const mongoConnectionString = 'mongodb://127.0.0.1:27017/wgeteer';
+const mongoConnectionString = process.env.MONGO_DATABASE || 'mongodb://127.0.0.1:27017/wgeteer';
 
 mongoose
   .connect(mongoConnectionString, {
